@@ -20,10 +20,10 @@ void led_off(unsigned char x);
 
 void initDriver(void)
 {
- 	CLKPR = 0b10000000;                // Prescaler change enable!
-	CLKPR = 0;                         // use 16 MHz - cycle time now 62.5 nsec
+    CLKPR = 0b10000000;                // Prescaler change enable!
+    CLKPR = 0;                         // use 16 MHz - cycle time now 62.5 nsec
     MCUCR = MCUCR|(1 << JTD);		   // JTAG disable
-	MCUCR = MCUCR|(1 << JTD);
+    MCUCR = MCUCR|(1 << JTD);
 
     DDRD = 0xff;   // FLIP-LD | x | x | x |   x | x | x | x |
     DDRF = 0;      // read adc
