@@ -6,6 +6,7 @@
 //
 //
 //*****************************************************************************
+// initDriver mit Parameter EL_TEST_BOARD EL_AUTO
 
 #include <avr/io.h>
 #include <avr/interrupt.h>
@@ -18,7 +19,7 @@ void led_on(unsigned char x);
 void led_off(unsigned char x);
 
 
-void initDriver(void)
+void initDriver(char target)
 {
     CLKPR = 0b10000000;                // Prescaler change enable!
     CLKPR = 0;                         // use 16 MHz - cycle time now 62.5 nsec
