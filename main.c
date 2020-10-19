@@ -7,22 +7,22 @@
 
 int main(void)
 {
-    initDriver();
+    unsigned char x;
+    initDriver(DISPLAY_AVAILABLE /*EL_TEST_BOARD*/);
 
     adc.use(ADC0);
     led.on(FLIP);
 
+    display.writeString("ok!");
+    display.hideCursor();
+
     for(;;)
     {
 
-         if (adc.get() < 100)
-         {
-            led.on(FLIP);
-         }
-         else
-         {
-            led.off(FLIP);
-         }
+           x = adc.get();
+           display.setCursor(4);
+           display.writeInt(x);
+           //led.barMeterLin(x);
 
     }
 
