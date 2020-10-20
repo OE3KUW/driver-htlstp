@@ -8,21 +8,26 @@
 int main(void)
 {
     unsigned char x;
-    initDriver(DISPLAY_AVAILABLE /*EL_TEST_BOARD*/);
+
+    initDriver(EL_TEST_BOARD);
+
+    // for the display use instead of EL_TEST_BOARD   DIS_TEST (Display - Testboard)
 
     adc.use(ADC0);
     led.on(FLIP);
 
-    display.writeString("ok!");
+    //display.writeString("St.Pölten :-)");
     display.hideCursor();
 
     for(;;)
     {
 
            x = adc.get();
-           display.setCursor(4);
+
+           display.setCursor(0);
            display.writeInt(x);
-           //led.barMeterLin(x);
+
+           led.barMeterLin(x);
 
     }
 
