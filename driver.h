@@ -8,8 +8,17 @@
 //*****************************************************************************
 
 // target:
-#define EL_TEST_BOARD   0
-#define EL_AUTO         1
+//-----------------------------------------------------------------------------
+#define EL_TEST_BOARD                  0
+#define DIS_TEST                       1    // Display conncted on PortB of the EL tst board
+#define DIS2_TEST                      2    // as DIS_TEST but with two lines
+#define EL_ROBOTER                     3    // this system has a DISPLAY_2LINES_I2C_CONNECTED
+                                            // connected via i2c bus on a portexpander-IC
+#define EL_ROBOTER_DIS2                4    // Diplay with two lines on a roboter
+
+
+
+
 
 #define TRUE                           1
 #define FALSE                          0
@@ -50,6 +59,26 @@ struct struct_adc
 };
 ADC_TYPE adc;
 
+// usage:
+//-----------------------------------------------------------------------------
+// adc.use(pinNr);
+//-----------------------------------------------------------------------------
+// What4:  this function selects an ADC-Pin, for e.g. ADC0 --- PORTF0
+// IN:     pinNr switchs the multiplex modul,
+//         choose on of the defines: ADC0. ADC1, ADC4, ADC5, ADC6 or ADC7
+//         attention: PORTF6, and PORTF7 can also be used for ir - component
+// POST:   the multiplexer is switched
+// RETURN: nothing
+//-----------------------------------------------------------------------------
+
+//-----------------------------------------------------------------------------
+// unsigned char x = adc.get();
+//-----------------------------------------------------------------------------
+// What 4:
+
+
+
+
 typedef struct struct_i2c I2C_TYPE;
 struct struct_i2c
 {
@@ -69,7 +98,7 @@ struct display_struct
     void (*writeString)(char * s);
     void (*writeString2ndLine)(char * s);
     void (*writeInt)(int i);
-    void (*writeInt02)(int i);
+    void (*writeFloat)(float x);  // wird erst entwicklet...
     void (*hideCursor)(void);
     void (*showCursor)(void);
     void (*storeSymbol)(char s[], char space);
