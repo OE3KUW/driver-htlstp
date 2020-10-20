@@ -63,7 +63,7 @@ void _setCursor(char x);
 void _writeString(char * s);
 void _writeString2ndLine(char *s);
 void _writeInt(int i);
-void _writeInt02(int i);
+void _writeFloat(float x);
 void _hideCursor(void);
 void _showCursor(void);
 void _storeSymbol(char s[], char space);
@@ -73,6 +73,7 @@ void _clear(void);
 void _doNothing_Void(void);
 void _doNothing_Char(char);
 void _doNothing_Int(int);
+void _doNothing_Float(float);
 void _doNothing_String(char *);
 void _doNothing_Array_Char(char s[], char space);
 void _internalCallBackDoNothing(char c);
@@ -83,9 +84,6 @@ void _writeCommand4(char rs, char command);
 // das Letzte:
 void _wait_64_usec(void);
 void delay(int msec);
-
-
-
 
 
 void initDriver(char target)
@@ -111,7 +109,6 @@ void initDriver(char target)
     ADCSRA |= (1 << ADEN);
     ADCSRA |= (1 << ADSC);
 
-
     adc.use = adc_use;
     adc.get = adc_get;
 
@@ -124,7 +121,6 @@ void initDriver(char target)
 //  i2c-Container:
 
 	TWBR = 12;     // TWBR=12, TWPS=0 im Reg. TWSR per default;  set f_SCL = 400 kHz
-
 	i2cInit();                         // needs PORT D Pin 0 = CLK and 1 = SDA
 
 //  i2c:
@@ -133,23 +129,18 @@ void initDriver(char target)
 
     i2c.write = i2c_Write;
 
-
 //  display:
 
-    display.displayLinelength = ((target == DISPLAY_WITH_2_LINES ) ||
-                                 (target == DISPLAY_2LINES_I2C_CONNECTED)) ? 16 : 8;
+    display.displayLinelength = ((target == DIS2_TEST) || (target == EL_ROBOTER_DIS2 )) ? 16 : 8;
 
-    if (target == DISPLAY_2LINES_I2C_CONNECTED) target = DISPLAY_I2C_CONNECTED;
-
-
-    if (target)
+    if (target)   // all systems with an display have numbers greater than 0
     {
             display.writeChar          = _writeChar;
             display.setCursor          = _setCursor;
             display.writeString        = _writeString;
             display.writeString2ndLine = _writeString2ndLine;
             display.writeInt           = _writeInt;
-            display.writeInt02         = _writeInt02;
+            display.writeFloat         = _writeFloat;
             display.hideCursor         = _hideCursor;
             display.showCursor         = _showCursor;
             display.storeSymbol        = _storeSymbol;
@@ -159,10 +150,9 @@ void initDriver(char target)
 
             delay(50);
 
-        if (target != DISPLAY_I2C_CONNECTED)
+        if (target < EL_ROBOTER)  // the roboter uses i2c port expander
         {
             _useI2Cdisplay = FALSE;
-
 
             _writeCommand8(0, DISPLAY_8_BIT_MODE);    delay(20);
             _writeCommand8(0, DISPLAY_8_BIT_MODE);    delay(20);
@@ -175,12 +165,9 @@ void initDriver(char target)
             _writeCommand4(0, DISPLAY_ENTRY_MODE);    delay(20);
             _writeCommand4(0, DISPLAY_ON);            delay(20);
         }
-        else  // i2c display:
+        else  // EL ROBOTER uses i2c with an portexpander for the display:
         {
             _useI2Cdisplay = TRUE;
-
-
-
 
             _writeCommand8(0, 0x03);                  delay(20);  // 8 BIT MODE
             _writeCommand8(0, 0x03);                  delay(20);
@@ -203,7 +190,7 @@ void initDriver(char target)
             display.writeChar   = _doNothing_Char;
             display.writeString = _doNothing_String;
             display.writeInt    = _doNothing_Int;
-            display.writeInt02  = _doNothing_Int;
+            display.writeFloat  = _doNothing_Float;
             display.hideCursor  = _doNothing_Void;
             display.showCursor  = _doNothing_Void;
             display.storeSymbol = _doNothing_Array_Char;
@@ -211,9 +198,7 @@ void initDriver(char target)
     }
 
 
-
-
-}
+}  // end of initDriver
 
 // ADC:
 
@@ -322,6 +307,7 @@ unsigned int t = 0;
 void _doNothing_Void(void)              {}
 void _doNothing_Char(char a)            {}
 void _doNothing_Int(int i)              {}
+void _doNothing_Float(float x)          {}
 void _doNothing_String(char * s)        {}
 void _doNothing_Array_Char(char s[], char space) {}
 void _internalCallBackDoNothing(char c) { }
@@ -521,15 +507,23 @@ char neg = FALSE;
 
 }
 
-void _writeInt02(int i)
+void _writeFloat(float x)
 {
-        // only positiv values !
+/*
+wird erst entwickelt. ...
+int i;
 
-        if (i > 99)  i = 99;
-        if (i < 0)   i = 0;
+    if (x >= 1000.) {i = (int)x; i %= 10000; i /= 1000; _writeChar(i + '0');}
+    if (x >=  100.) {i = (int)x; i %=  1000; i /=  100; _writeChar(i + '0');}
+    if (x >=   10.) {i = (int)x; i %=   100; i /=   10; _writeChar(i + '0');}
+    if (x >=    0.) {i = (int)x; i %=    10;            _writeChar(i + '0');}
+    else _writeChar('0');
+         _writeChar('.');
 
-        _writeChar((i)/10 + '0');
-        _writeChar((i)%10 + '0');
+    i = (int)(x * 10.);   i %= 10;                      _writeChar(i + '0');
+    i = (int)(x * 100.);  i %= 10;                      _writeChar(i + '0');
+    i = (int)(x * 1000.); i %= 10;                      _writeChar(i + '0');
+*/
 }
 
 void _hideCursor(void)
