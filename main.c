@@ -7,9 +7,9 @@
 
 int main(void)
 {
-    unsigned char x;
+//    unsigned char x;
 
-    initDriver(EL_TEST_BOARD);
+    initDriver(EL_ROBOTER);
 
     // for the display use instead of EL_TEST_BOARD   DIS_TEST (Display - Testboard)
 
@@ -19,16 +19,19 @@ int main(void)
     //display.writeString("St.Pölten :-)");
     display.hideCursor();
 
+    display.setCursor(0);
+    display.writeFloat(-123.467);
+
     for(;;)
     {
-
+/*
            x = adc.get();
 
            display.setCursor(0);
            display.writeInt(x);
 
            led.barMeterLin(x);
-
+*/
     }
 
     return 0;
