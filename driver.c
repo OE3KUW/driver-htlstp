@@ -93,11 +93,22 @@ void initDriver(char target)
     MCUCR = MCUCR|(1 << JTD);		   // JTAG disable
     MCUCR = MCUCR|(1 << JTD);
 
+
+//PORT B:
     DDRB = 0xff;   // Leds
+    PORTB = 0;
+
+//  PORT C:
+	DDRC  = (1<<DDC6);				   // PC6 ist #RST from the Portexpander
+    PORTC = (1<<PC7);                  // capture Interrupt	PORTC |= (1<<PC6);				   // Portexpander switched off
+	PORTC |= (1<<PC6);
+
+//  PORT D:
     DDRD = 0xff;   // FLIP-LD | x | x | x |   x | x | x | x |
+
+//  PORT F:
     DDRF = 0;      // read adc
 
-    PORTB = 0;
 
 
 //  ADC converter:
@@ -509,9 +520,13 @@ char neg = FALSE;
 
 void _writeFloat(float x)
 {
-/*
-wird erst entwickelt. ...
 int i;
+
+    if (x < 0)
+    {
+        _writeChar('-');
+        x = -x;
+    }
 
     if (x >= 1000.) {i = (int)x; i %= 10000; i /= 1000; _writeChar(i + '0');}
     if (x >=  100.) {i = (int)x; i %=  1000; i /=  100; _writeChar(i + '0');}
@@ -520,10 +535,11 @@ int i;
     else _writeChar('0');
          _writeChar('.');
 
+    while (x > 100) x-= 100; // to avoid overflows!
+
     i = (int)(x * 10.);   i %= 10;                      _writeChar(i + '0');
     i = (int)(x * 100.);  i %= 10;                      _writeChar(i + '0');
     i = (int)(x * 1000.); i %= 10;                      _writeChar(i + '0');
-*/
 }
 
 void _hideCursor(void)
