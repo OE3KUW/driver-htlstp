@@ -1,17 +1,22 @@
 //*****************************************************************************
 //
-//                               d r i v e r
 //
-//                       oct 2020  EL htl.st.pölten
+//                               d r i v e r . c
 //
 //
+// Elektronik und Technische Informatik      dezember 2020 Wolfgang Uriel KURAN
 //*****************************************************************************
-// initDriver mit Parameter EL_TEST_BOARD EL_AUTO
+// C o n f i g u r a t i o n   L i n e s :                   © htl st.pölten EL
+
 
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include <avr/eeprom.h>
 #include "driver.h"
+
+//-----------------------------------------------------------------------------
+// intern Defines:
+//-----------------------------------------------------------------------------
 
 #define DISPLAY_8_BIT_MODE      0x30
 #define DISPLAY_4_BIT_MODE      0x20
@@ -40,36 +45,37 @@ char _useI2Cdisplay;
 
 // ==========================  PROTOTYPS:   ====================================
 
-void adc_use (unsigned char x);
-unsigned char adc_get (void);
+//-----------------------------------------------------------------------------
 void led_on(unsigned char x);
 void led_off(unsigned char x);
 void led_barMeterLin(unsigned char x);
-
-
-
-//  i2C:
+void led_number(unsigned char i);
+//-----------------------------------------------------------------------------
+void beeper_click(void);
+//-----------------------------------------------------------------------------
+void adc_use (unsigned char x);
+unsigned char adc_get (void);
+//-----------------------------------------------------------------------------
+void eeprom_storeInt(int value, unsigned int address);
+int eeprom_getInt(unsigned int address);
+//-----------------------------------------------------------------------------
 void i2cInit(void);
 void i2c_Write(char addr, char data);
 void i2c_Start(void);
 int  i2c_Wait(void);
 void i2c_Stop(void);
-
-// display functions:
-//  display:
-
-void _writeChar(char a);
-void _setCursor(char x);
-void _writeString(char * s);
-void _writeString2ndLine(char *s);
-void _writeInt(int i);
-void _writeFloat(float x);
-void _hideCursor(void);
-void _showCursor(void);
-void _storeSymbol(char s[], char space);
-void _clear(void);
-
-//  no display:
+//-----------------------------------------------------------------------------
+void display_writeChar(char a);
+void display_setCursor(char x);
+void display_writeString(char * s);
+void display_writeString2ndLine(char *s);
+void display_writeInt(int i);
+void display_writeFloat(float x);
+void display_hideCursor(void);
+void display_showCursor(void);
+void display_storeSymbol(char s[], char space);
+void display_clear(void);
+//-----------------------------------------------------------------------------
 void _doNothing_Void(void);
 void _doNothing_Char(char);
 void _doNothing_Int(int);
@@ -77,13 +83,13 @@ void _doNothing_Float(float);
 void _doNothing_String(char *);
 void _doNothing_Array_Char(char s[], char space);
 void _internalCallBackDoNothing(char c);
-
+//-----------------------------------------------------------------------------
 void _writeCommand8(char rs, char command);
 void _writeCommand4(char rs, char command);
-
-// das Letzte:
+//-----------------------------------------------------------------------------
 void _wait_64_usec(void);
 void delay(int msec);
+//-----------------------------------------------------------------------------
 
 
 void initDriver(char target)
@@ -92,7 +98,6 @@ void initDriver(char target)
     CLKPR = 0;                         // use 16 MHz - cycle time now 62.5 nsec
     MCUCR = MCUCR|(1 << JTD);		   // JTAG disable
     MCUCR = MCUCR|(1 << JTD);
-
 
 //PORT B:
     DDRB = 0xff;   // Leds
@@ -103,15 +108,52 @@ void initDriver(char target)
     PORTC = (1<<PC7);                  // capture Interrupt	PORTC |= (1<<PC6);				   // Portexpander switched off
 	PORTC |= (1<<PC6);
 
+#ifndef EL_ROBOT
+
 //  PORT D:
-    DDRD = 0xff;   // FLIP-LD | x | x | x |   x | x | x | x |
+    DDRD = 0xf0;   // used for the keys
 
 //  PORT F:
     DDRF = 0;      // read adc
 
 
+#else // for the EL ROBOTER:
 
+//  PORT D:
+    DDRD = 0xef;   // on PD4 0b11101111  Capture Interrupt - to we use this??????
+
+//  PORT F:
+    DDRF = 0x60;    /* 0110 0000 F5, F6 controlls IRs */
+
+// infra red controll:
+
+    // PORTF = 0x60; // BACK RIGHT
+    // PORTF = 0x0;  // FRONT LEFT
+    // PORTF = 0x20; // FRONT RIGHT
+
+    PORTF = 0x40; // BACK LEFT
+    PORTF |= 0x80; // PortF7 = High
+
+
+#endif // EL_ROBOT
+
+//-----------------------------------------------------------------------------
+//  leds:
+//-----------------------------------------------------------------------------
+
+    led.on          = led_on;
+    led.off         = led_off;
+    led.barMeterLin = led_barMeterLin;
+    led.number      = led_number;
+//-----------------------------------------------------------------------------
+//  beeper:
+//-----------------------------------------------------------------------------
+
+    beeper.click    = beeper_click;
+
+//-----------------------------------------------------------------------------
 //  ADC converter:
+//-----------------------------------------------------------------------------
 
     ADCSRA  = (1 << ADPS2) | (1 << ADPS1);
     ADMUX  |= (1 << REFS0);             // reference Voltage
@@ -123,13 +165,19 @@ void initDriver(char target)
     adc.use = adc_use;
     adc.get = adc_get;
 
-//  leds:
+//-----------------------------------------------------------------------------
+//  eeprom:
+//-----------------------------------------------------------------------------
 
-    led.on  = led_on;
-    led.off = led_off;
-    led.barMeterLin = led_barMeterLin;
+    eeprom.getInt   = eeprom_getInt;
+    eeprom.storeInt = eeprom_storeInt;
 
+
+
+
+//-----------------------------------------------------------------------------
 //  i2c-Container:
+//-----------------------------------------------------------------------------
 
 	TWBR = 12;     // TWBR=12, TWPS=0 im Reg. TWSR per default;  set f_SCL = 400 kHz
 	i2cInit();                         // needs PORT D Pin 0 = CLK and 1 = SDA
@@ -140,28 +188,30 @@ void initDriver(char target)
 
     i2c.write = i2c_Write;
 
+//-----------------------------------------------------------------------------
 //  display:
+//-----------------------------------------------------------------------------
 
-    display.displayLinelength = ((target == DIS2_TEST) || (target == EL_ROBOTER_DIS2 )) ? 16 : 8;
+    display.displayLinelength = ((target == DIS2_TEST) || (target == EL_ROBOT )) ? 16 : 8;
 
     if (target)   // all systems with an display have numbers greater than 0
     {
-            display.writeChar          = _writeChar;
-            display.setCursor          = _setCursor;
-            display.writeString        = _writeString;
-            display.writeString2ndLine = _writeString2ndLine;
-            display.writeInt           = _writeInt;
-            display.writeFloat         = _writeFloat;
-            display.hideCursor         = _hideCursor;
-            display.showCursor         = _showCursor;
-            display.storeSymbol        = _storeSymbol;
-            display.clear              = _clear;
+            display.writeChar          = display_writeChar;
+            display.setCursor          = display_setCursor;
+            display.writeString        = display_writeString;
+            display.writeString2ndLine = display_writeString2ndLine;
+            display.writeInt           = display_writeInt;
+            display.writeFloat         = display_writeFloat;
+            display.hideCursor         = display_hideCursor;
+            display.showCursor         = display_showCursor;
+            display.storeSymbol        = display_storeSymbol;
+            display.clear              = display_clear;
 
         // initialize LC-Display:
 
             delay(50);
 
-        if (target < EL_ROBOTER)  // the roboter uses i2c port expander
+        if (target < EL_ROBOT)  // the roboter uses i2c port expander
         {
             _useI2Cdisplay = FALSE;
 
@@ -169,6 +219,7 @@ void initDriver(char target)
             _writeCommand8(0, DISPLAY_8_BIT_MODE);    delay(20);
             _writeCommand8(0, DISPLAY_8_BIT_MODE);    delay(20);
             _writeCommand8(0, DISPLAY_4_BIT_MODE);    delay(400);
+
             _writeCommand4(0, DISPLAY_CLEAR);         delay(20);
             _writeCommand4(0, DISPLAY_SET_FUNCTION);  delay(20);
             _writeCommand4(0, DISPLAY_OFF);           delay(20);
@@ -180,18 +231,17 @@ void initDriver(char target)
         {
             _useI2Cdisplay = TRUE;
 
-            _writeCommand8(0, 0x03);                  delay(20);  // 8 BIT MODE
-            _writeCommand8(0, 0x03);                  delay(20);
-            _writeCommand8(0, 0x03);                  delay(20);
-	        _writeCommand8(0, 0x02);                  delay(400); // 4 BIT MODE
+            _writeCommand8(0, 0x03);/* 8 Bit       */ delay(20);
+            _writeCommand8(0, 0x03);/* 8 Bit       */ delay(20);
+            _writeCommand8(0, 0x03);/* 8 Bit       */ delay(20);
+	        _writeCommand8(0, 0x02);/* 4 Bit       */ delay(400);
 
-
-	        _writeCommand4(0, 0x01);   delay(20);// Clear Display
-            _writeCommand4(0, 0x28);   delay(20);// Z-zeilig, 5x8 Matrix
-            _writeCommand4(0, 0x08);   delay(20);// Display Off
-            _writeCommand4(0, 0x03);   delay(20);// No Display Shift
-            _writeCommand4(0, 0x06);   delay(20);// Entry Mode
-            _writeCommand4(0, 0x0e);   delay(20);// Display ON
+	        _writeCommand4(0, 0x01);/*Clear Display*/ delay(20);
+            _writeCommand4(0, 0x28);/*2-lines, 5x8 */ delay(20);
+            _writeCommand4(0, 0x08);/*Display Off  */ delay(20);
+            _writeCommand4(0, 0x03);/*No Shift     */ delay(20);
+            _writeCommand4(0, 0x06);/*Entry Mode   */ delay(20);
+            _writeCommand4(0, 0x0e);/*Display ON   */ delay(20);
 
         }
     }
@@ -211,7 +261,80 @@ void initDriver(char target)
 
 }  // end of initDriver
 
+//-----------------------------------------------------------------------------
+//
+//  c o n t a i n e r   -   f u n c t i o n s :
+//
+//-----------------------------------------------------------------------------
+
+//-----------------------------------------------------------------------------
+// LED:
+//-----------------------------------------------------------------------------
+
+void led_on(unsigned char x)
+{
+    switch (x)
+    {
+        case FLIP        : PORTD &= ~x; break;
+        case RIGHT_FRONT : PORTB |=  x; break;
+        case RIGHT_REAR  : PORTB |=  x; break;
+        case LEFT_FRONT  : PORTB |=  x; break;
+        case LEFT_REAR   : PORTB |=  x; break;
+
+        case DUAL_GREEN  : PORTB |=  x; break;
+        case DUAL_RED    : PORTB |=  x; break;
+        case DUAL_YELLOW : PORTB |=  x; break;
+    }
+}
+void led_off(unsigned char x)
+{
+    switch (x)
+    {
+        case FLIP        : PORTD |=  x; break;
+        case RIGHT_FRONT : PORTB &= ~x; break;
+        case RIGHT_REAR  : PORTB &= ~x; break;
+        case LEFT_FRONT  : PORTB &= ~x; break;
+        case LEFT_REAR   : PORTB &= ~x; break;
+
+        case DUAL_GREEN  : PORTB &= ~x; break;
+        case DUAL_RED    : PORTB &= ~x; break;
+        case DUAL_YELLOW : PORTB &= ~x; break;
+    }
+}
+
+void led_barMeterLin(unsigned char x)
+{
+    PORTB = (x > 254) ? 0xff : (0xff >> (8 - (x >> 5))); // Lukas Stadler 3BHELS 2020
+}
+
+void led_number(unsigned char i)
+{
+char x = 0;
+
+    x = (i == 0) ? 0x01 :
+        (i == 1) ? 0x02 :
+        (i == 2) ? 0x08 :
+                   0x04 ;
+
+    PORTB &= 0xf0;
+    PORTB |= x;
+}
+
+//-----------------------------------------------------------------------------
+// BEEPER:
+//-----------------------------------------------------------------------------
+
+void beeper_click(void)
+{
+        PORTB |=  BEEPER_CLICK;
+        _wait_64_usec();
+        PORTB &= ~BEEPER_CLICK;
+
+}
+
+//-----------------------------------------------------------------------------
 // ADC:
+//-----------------------------------------------------------------------------
 
 void adc_use (unsigned char x)
 {
@@ -234,27 +357,33 @@ unsigned char adc_get (void)
     return ADCH;
 }
 
-// LED:
-
-void led_on(unsigned char x)
+//-----------------------------------------------------------------------------
+// BEEPER:
+//-----------------------------------------------------------------------------
+void eeprom_storeInt(int value, unsigned int address)
 {
-    switch (x)
-    {
-        case FLIP:  PORTD &= ~FLIP;  break;
-    }
+uint8_t low, high;
 
+    address <<= 2;
+    address %= 0x200;  // maybee there is more space available....
+
+    low = value & 0xff;
+    eeprom_write_byte((uint8_t*)address, low);
+    high = (value >> 8) & 0xff;
+    eeprom_write_byte((uint8_t*)address + 1, high);
 }
-void led_off(unsigned char x)
+int eeprom_getInt(unsigned int address)
 {
-    switch (x)
-    {
-        case FLIP:  PORTD |= FLIP;  break;
-    }
-}
+uint8_t low, high;
 
-void led_barMeterLin(unsigned char x)
-{
-    PORTB = (x > 254) ? 0xff : (0xff >> (8 - (x >> 5))); // Lukas Stadler 3BHELS 2020
+    address <<= 2;
+    address %= 0x200;  // maybee there is more space available....
+
+
+    low  = eeprom_read_byte((uint8_t*)address);
+    high = eeprom_read_byte((uint8_t*)address + 1);
+
+    return (int)((high << 8) + low);
 }
 
 
@@ -393,12 +522,12 @@ char temp = command, x = 0xC0;	// prepare for P7 and P6 has to be HIGH for PCF85
     }
 }
 
-void _writeChar(char a)
+void display_writeChar(char a)
 {
     _writeCommand4(DATA, a);
 }
 
-void _setCursor(char x)
+void display_setCursor(char x)
 {
     if (x < 0) x = 0;
 
@@ -413,13 +542,13 @@ void _setCursor(char x)
     _writeCommand4(0, DISPLAY_SET_CURSOR | x);
 }
 
-void _writeString(char * s)
+void display_writeString(char * s)
 {
 int i = 0;
 int j = 0;
 
 
-    _setCursor(0);
+    display_setCursor(0);
 
     while ((i - j < display.displayLinelength) && (*(s+i)))
     {
@@ -440,11 +569,11 @@ int j = 0;
             }
         }
 
-        _writeChar(*(s+i));
+        display_writeChar(*(s+i));
         i++;
     }
 
-    _setCursor(display.displayLinelength); // position 8 jumps intern to position 0x40 !
+    display_setCursor(display.displayLinelength); // position 8 jumps intern to position 0x40 !
     while ((i - j < (display.displayLinelength << 1)) && (*(s+i)))
     {
 
@@ -465,12 +594,12 @@ int j = 0;
             }
         }
 
-        _writeChar(*(s+i));
+        display_writeChar(*(s+i));
         i++;
     }
 }
 
-void _writeString2ndLine(char *s)
+void display_writeString2ndLine(char *s)
 {
 int i = 0;
 
@@ -479,13 +608,13 @@ int i = 0;
         _writeCommand4(0, DISPLAY_SET_CURSOR | 0x40);
         while ((i < display.displayLinelength) && (*(s+i)))
         {
-            _writeChar(*(s+i));
+            display_writeChar(*(s+i));
             i++;
         }
     }
 }
 
-void _writeInt(int i)
+void display_writeInt(int i)
 {
 char neg = FALSE;
 
@@ -497,62 +626,62 @@ char neg = FALSE;
             neg = TRUE; i = -i;
         }
 
-        ((neg == TRUE) && (i >=100)) ? _writeChar('-') : _writeChar(' ');
+        ((neg == TRUE) && (i >=100)) ? display_writeChar('-') : display_writeChar(' ');
 
         if (i < 100)
-            ((neg == TRUE) && (i >= 10)) ? _writeChar('-') : _writeChar(' ');
+            ((neg == TRUE) && (i >= 10)) ? display_writeChar('-') : display_writeChar(' ');
         else
         {
-            _writeChar((i/100)%10 + '0');
+            display_writeChar((i/100)%10 + '0');
         }
 
 
         if (i < 10)
-            (neg == TRUE) ? _writeChar('-') : _writeChar(' ');
+            (neg == TRUE) ? display_writeChar('-') : display_writeChar(' ');
         else
         {
-            _writeChar((i/10)%10 + '0');
+            display_writeChar((i/10)%10 + '0');
         }
 
-        _writeChar((i)%10 + '0');
+        display_writeChar((i)%10 + '0');
 
 }
 
-void _writeFloat(float x)
+void display_writeFloat(float x)
 {
 int i;
 
     if (x < 0)
     {
-        _writeChar('-');
+        display_writeChar('-');
         x = -x;
     }
 
-    if (x >= 1000.) {i = (int)x; i %= 10000; i /= 1000; _writeChar(i + '0');}
-    if (x >=  100.) {i = (int)x; i %=  1000; i /=  100; _writeChar(i + '0');}
-    if (x >=   10.) {i = (int)x; i %=   100; i /=   10; _writeChar(i + '0');}
-    if (x >=    0.) {i = (int)x; i %=    10;            _writeChar(i + '0');}
-    else _writeChar('0');
-         _writeChar('.');
+    if (x >= 1000.) {i = (int)x; i %= 10000; i /= 1000; display_writeChar(i + '0');}
+    if (x >=  100.) {i = (int)x; i %=  1000; i /=  100; display_writeChar(i + '0');}
+    if (x >=   10.) {i = (int)x; i %=   100; i /=   10; display_writeChar(i + '0');}
+    if (x >=    0.) {i = (int)x; i %=    10;            display_writeChar(i + '0');}
+    else display_writeChar('0');
+         display_writeChar('.');
 
     while (x > 100) x-= 100; // to avoid overflows!
 
-    i = (int)(x * 10.);   i %= 10;                      _writeChar(i + '0');
-    i = (int)(x * 100.);  i %= 10;                      _writeChar(i + '0');
-    i = (int)(x * 1000.); i %= 10;                      _writeChar(i + '0');
+    i = (int)(x * 10.);   i %= 10;                      display_writeChar(i + '0');
+    i = (int)(x * 100.);  i %= 10;                      display_writeChar(i + '0');
+    i = (int)(x * 1000.); i %= 10;                      display_writeChar(i + '0');
 }
 
-void _hideCursor(void)
+void display_hideCursor(void)
 {
      _writeCommand4(0, DISPLAY_ON_CURSOR_OFF);
 }
 
-void _showCursor(void)
+void display_showCursor(void)
 {
      _writeCommand4(0, DISPLAY_ON);
 }
 
-void _storeSymbol(char s[], char space)
+void display_storeSymbol(char s[], char space)
 {
 
     char base = space << 3;
@@ -567,7 +696,7 @@ void _storeSymbol(char s[], char space)
     _writeCommand4(0, 0);  // switch back from DATA!
 }
 
-void _clear(void)
+void display_clear(void)
 {
     display.writeString("                ");
     display.writeString2ndLine("                ");
