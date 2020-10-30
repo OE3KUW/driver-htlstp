@@ -192,7 +192,8 @@ void initDriver(char target)
 //  display:
 //-----------------------------------------------------------------------------
 
-    display.displayLinelength = ((target == DIS2_TEST) || (target == EL_ROBOT )) ? 16 : 8;
+    display.Linelength = ((target == DIS2_TEST) || (target == EL_ROBOT )) ? 16 : 8;
+    display.shownCursorPosition = 0;
 
     if (target)   // all systems with an display have numbers greater than 0
     {
@@ -522,20 +523,33 @@ char temp = command, x = 0xC0;	// prepare for P7 and P6 has to be HIGH for PCF85
     }
 }
 
+//-----------------------------------------------------------------------------
+// DISPLAY:
+//-----------------------------------------------------------------------------
+
 void display_writeChar(char a)
 {
     _writeCommand4(DATA, a);
+    display.shownCursorPosition++;
+
+    if (display.shownCursorPosition >= display.Linelength)
+        display_setCursor(display.shownCursorPosition);
+
 }
 
 void display_setCursor(char x)
 {
     if (x < 0) x = 0;
 
-    if (display.displayLinelength == 8)
+    x = x % (display.Linelength <<1);
+
+    display.shownCursorPosition = x;
+
+    if (display.Linelength == 8)
     {
-        if (x == 8) x += 0x38; // 0x40 - 8  = 0x38
+        if (x >= 8) x += 0x38; // 0x40 - 8  = 0x38
     }
-    if (display.displayLinelength == 16)
+    if (display.Linelength == 16)
     {
         if (x >= 16) x += 0x30; // 0x40 - 16 = 0x30
     }
@@ -550,7 +564,7 @@ int j = 0;
 
     display_setCursor(0);
 
-    while ((i - j < display.displayLinelength) && (*(s+i)))
+    while ((i - j < display.Linelength) && (*(s+i)))
     {
         if (*(s+i) == -61)
         {
@@ -573,8 +587,8 @@ int j = 0;
         i++;
     }
 
-    display_setCursor(display.displayLinelength); // position 8 jumps intern to position 0x40 !
-    while ((i - j < (display.displayLinelength << 1)) && (*(s+i)))
+    display_setCursor(display.Linelength); // position 8 jumps intern to position 0x40 !
+    while ((i - j < (display.Linelength << 1)) && (*(s+i)))
     {
 
         if (*(s+i) == -61)
@@ -603,10 +617,10 @@ void display_writeString2ndLine(char *s)
 {
 int i = 0;
 
-    if (display.displayLinelength > 8)
+    if (display.Linelength > 8)
     {
         _writeCommand4(0, DISPLAY_SET_CURSOR | 0x40);
-        while ((i < display.displayLinelength) && (*(s+i)))
+        while ((i < display.Linelength) && (*(s+i)))
         {
             display_writeChar(*(s+i));
             i++;
