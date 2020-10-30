@@ -11,7 +11,7 @@
 // target:
 //-----------------------------------------------------------------------------
 #define EL_TEST_BOARD                  0    // Testboardonly
-#define DIS_TEST                       1    // Display conncted on PortB
+#define DIS_TEST                       1    // 1-line Display conncted on PortB
 #define DIS2_TEST                      2    // as DIS_TEST but with two lines
 #define EL_ROBOT                       3    // Roboter i2c-disply two lines
 //-----------------------------------------------------------------------------
@@ -239,8 +239,8 @@ struct display_struct
     void (*storeSymbol)(char s[], char space);
     void (*clear)(void);
 //  private:
-    int displayLinelength;
-
+    int shownCursorPosition;
+    int Linelength;
 };
 DISPLAY display;
 
