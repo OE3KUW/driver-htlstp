@@ -10,10 +10,12 @@
 //-----------------------------------------------------------------------------
 // target:
 //-----------------------------------------------------------------------------
+
 #define EL_TEST_BOARD                  0    // Testboardonly
 #define DIS_TEST                       1    // 1-line Display conncted on PortB
 #define DIS2_TEST                      2    // as DIS_TEST but with two lines
 #define EL_ROBOT                       3    // Roboter i2c-disply two lines
+
 //-----------------------------------------------------------------------------
 // Defines:
 //-----------------------------------------------------------------------------
@@ -22,16 +24,12 @@
 #define FALSE                          0
 #define HIGH                           1
 #define LOW                            0
-#define RELEASED                       1
-#define PRESSED                        0
 
 //-----------------------------------------------------------------------------
-// LEDs und BEEPER:
+// LEDs und BEEPER and KEYs:
 //-----------------------------------------------------------------------------
 
 #define FLIP                           0x80    // on board led
-
-#ifdef  EL_ROBOT
 
 #define RIGHT_FRONT                    0x01  // used for blinker
 #define RIGHT_REAR                     0x02
@@ -41,11 +39,16 @@
 #define DUAL_GREEN                     0x10	// PB4
 #define DUAL_RED                       0x20 // PB5
 #define DUAL_YELLOW                    0x30 // PB4 + PB5
+#define DUAL_LED                       0x30 // zuseful to switch the led off
 
 #define BEEPER_CLICK                   0x80  // used for the beepeer
 
+#define KEY0                           0x01
+#define KEY1                           0x02
+#define KEY2                           0x04
+#define KEY3                           0x08
 
-#endif // EL_ROBOT
+#define BOUD_RATE_9600                 103
 
 //-----------------------------------------------------------------------------
 // ADC:
@@ -54,11 +57,23 @@
 #define ADC0                           0x0
 #define ADC1                           0x01
 #define ADC4                           0x04
-#define ADC5                           0x05
-#define ADC6                           0x06
+#define ADC5                           0x05  // dont use them! (infra red sensor)
+#define ADC6                           0x06  // dont use them! (infra red sensor)
 #define ADC7                           0x07
 
 #define ADC_VOLTAGE                    28.6  // depends on settings
+
+//-----------------------------------------------------------------------------
+// I-RED:
+//-----------------------------------------------------------------------------
+
+#define IRED_FRONT                     0x0
+#define IRED_BACK                      0x40
+#define IRED_LEFT                      0x0
+#define IRED_RIGHT                     0x20
+
+#define ON                             1
+#define OFF                            0
 
 
 // braucht das wer? - falls jka - wer?
@@ -212,6 +227,257 @@ EEPROM_TYPE eeprom;
 // RETURN: i is an integer - get from the e2prom
 //-----------------------------------------------------------------------------
 
+typedef struct struct_keys KEYS_TYPE;
+struct struct_keys
+{
+// public:
+    char (*pressed)(char key);
+    char (*released)(char key);
+    void (*quit)(void);
+    char (*stillPressed)(char key); // new
+// private:
+    char last_keys;
+    char next_keys;
+    char flags;
+
+};
+KEYS_TYPE key;
+
+//-----------------------------------------------------------------------------
+// if (key.pressed(KEY0) == TRUE)
+//-----------------------------------------------------------------------------
+// What 4: this function can be used to get key-information
+// PRE: keys can only be used for target = EL_TEST_BOARD
+// IN: KEY0 = a defined value for a key. see define - list
+// POST: nothing
+// RETURN: TRUE if KEY0 is pressed
+// NOTE: after any key-event use key.quit(); to be prepared for the next event
+//-----------------------------------------------------------------------------
+
+//-----------------------------------------------------------------------------
+// if (key.released(KEY0))
+//-----------------------------------------------------------------------------
+// What 4: this function can be used to get key-information
+// PRE: keys can only be used for target = EL_TEST_BOARD
+// IN: KEY0 = a defined value for a key. see define - list
+// POST: nothing
+// RETURN:  FALSE if KEY0 is released
+// NOTE: after any key-event use key.quit(); to be prepared for the next event
+//-----------------------------------------------------------------------------
+
+//-----------------------------------------------------------------------------
+// key.quit();
+//-----------------------------------------------------------------------------
+// What 4: use this function to quit a key-event
+// PRE: keys can only be used for target = EL_TEST_BOARD
+// IN: nothing
+// POST: internal flags will be reseted.
+// RETURN: nothing
+//-----------------------------------------------------------------------------
+
+//-----------------------------------------------------------------------------
+// if(key.stillPressed(KEY0))
+//-----------------------------------------------------------------------------
+// What 4: to find out - that a key wasn't relesed in between
+// PRE: keys can only be used for target = EL_TEST_BOARD
+// IN: KEY0 = a defined value for a key. see define - list
+// POST: nothing
+// RETURN: TRUE or FALSE
+//-----------------------------------------------------------------------------
+
+typedef struct struct_serial SERIAL_TYPE;
+struct struct_serial
+{
+// public:
+    void (*cb)(char);
+    void (*send)(char);
+    void (*storeMyCallBackFunction)(void (*cb)(char));
+// private:
+    volatile char received;
+    volatile char flag;
+
+};
+SERIAL_TYPE serial;
+
+//-----------------------------------------------------------------------------
+// serial.send('A');
+//-----------------------------------------------------------------------------
+// What 4: this function sends a character via the UART
+// PRE: hardware connected, PC programm receives
+// IN: 'A' any character
+// POST: the string is sent character by character - 9600 boud
+// RETURN: nothing
+//-----------------------------------------------------------------------------
+
+//-----------------------------------------------------------------------------
+// serial.storeMyCallBackFunktion(receiveFunction);
+//-----------------------------------------------------------------------------
+// What 4: this fundction stores the address of the call-back-function
+// PRE: hardware connected, PC programm receives
+//      an own callback function from type: void f(char); must exist.
+// IN: the address of the own callbackfunction
+// POST: the adress is stored.
+// RETURN: nothing
+//-----------------------------------------------------------------------------
+
+typedef struct struct_motor MOTOR_TYPE;
+struct struct_motor
+{
+// public:
+    void (*setSpeed)(char);
+    void (*setDiff)(char);
+    void (*stop)(void);
+//private:
+    unsigned char left;
+    unsigned char right;
+//    unsigned char leftC;
+//    unsigned char rightC;
+
+    char speed;
+    char diff;
+};
+MOTOR_TYPE motor;
+
+//-----------------------------------------------------------------------------
+// motor.setSpeed(s);
+//-----------------------------------------------------------------------------
+// What 4: this fuction defines how fast the motor drives forward
+// PRE: target == EL_ROBOT
+// IN:  s = integer value
+// POST: motor drives forward with a speed set by s
+// RETURN: nothing
+//-----------------------------------------------------------------------------
+
+//-----------------------------------------------------------------------------
+// motor.setDiff(d);
+//-----------------------------------------------------------------------------
+// What 4: this function defines how fast the motor turns around
+// PRE: target == EL_ROBOT
+// IN: d an integer value, it defines how fast the motor turns
+// POST: motor turns around with a speed set by d
+// RETURN: nothing
+//-----------------------------------------------------------------------------
+
+typedef struct struct_iRed IRED_TYPE;
+struct struct_iRed
+{
+// public:
+    void (*selectDirection)(char); // Front or Back
+    void (*selectSide)(char);      // Left or Right
+    void (*selectQuarter)(char);
+    void (*switchTransmitter)(char);
+    char (*receivedSignal)(void);
+    void (*quit)(void);
+// private:
+    char flag;
+    char transmit;
+};
+IRED_TYPE iRed;
+
+//-----------------------------------------------------------------------------
+// iRed.selectDirection(IRED_FRONT);
+//-----------------------------------------------------------------------------
+// What 4: select receiving and transmitting direction from iRed signals
+// PRE: hardware must have all iRed sensors :-)
+// IN:  IRED_FRONT or IRED_BACK
+// POST: the directionfor receiving and for transmitting is choosen
+// RETURN: nothing
+//-----------------------------------------------------------------------------
+
+//-----------------------------------------------------------------------------
+// iRed.selectSide(IRED_LEFT);
+//-----------------------------------------------------------------------------
+// What 4: select the side to send iRed signals
+// PRE: hardware must have all iRed sensors :-)
+// IN: IRED_LEFT or IRED_RIGHT
+// POST: the side is selected to send iRed signals
+// RETURN: nothing
+//-----------------------------------------------------------------------------
+
+//-----------------------------------------------------------------------------
+// iRed.selectQuarter(n);
+//-----------------------------------------------------------------------------
+// What 4: selcts for receiving front or rear, and for sending the quarter
+// PRE: same as above - hardware must work
+// IN: n 0 FRONT_RIGHT, 1 BACK_RIGHT, 2 BACK_LEFT and 3 FRONT_LEFT
+// POST:
+// RETURN: nothing
+//-----------------------------------------------------------------------------
+
+//-----------------------------------------------------------------------------
+// iRed.switchTransmitter(ON);
+//-----------------------------------------------------------------------------
+// What 4: with this function, the iRed sending can be started or stopped
+// IN: ON or OFF
+// POST: the iRed signal will be sended on the choosen quarter - or stopped
+// RETURN: nothing
+//-----------------------------------------------------------------------------
+
+
+//-----------------------------------------------------------------------------
+// if(iRed.receivedSignal() == TRUE)
+//-----------------------------------------------------------------------------
+// What 4: was there in the meantime any iRed signal received?
+// PRE: FRONT or REAR must be selected correct,
+//            own oszillator should not switched on for own sendings
+// IN: nothing
+// POST: nothing
+// RETURN: TRUE if there was a iRedSignal be received
+//-----------------------------------------------------------------------------
+
+
+//-----------------------------------------------------------------------------
+// iRed.quit();
+//-----------------------------------------------------------------------------
+// What 4: quit the iRed flag
+// IN: nothing
+// POST: the iRed flag is set to FALSE - as long as there is a new signal detected
+// RETURN: nothing
+//-----------------------------------------------------------------------------
+
+
+
+
+
+
+
+
+
+
+
+typedef struct struct_timeCounter TIME_COUNTER_TYPE;
+struct struct_timeCounter
+{
+    volatile int tenMsec;
+    char (*expired)(void);
+    void (*start)(int mSec);
+};
+TIME_COUNTER_TYPE timeCounter;
+TIME_COUNTER_TYPE timeCounter2;
+TIME_COUNTER_TYPE timeCounter3;
+
+//-----------------------------------------------------------------------------
+// timeCounter.start(1000);
+//-----------------------------------------------------------------------------
+// What 4: this function starts e timer-down-counter
+// IN: 1000 = an integer value, duration time in milliseconds
+// POST: from the start on - the timer counts down. (each 10 msec - a tick)
+// RETURN: nothing
+//-----------------------------------------------------------------------------
+
+//-----------------------------------------------------------------------------
+// if (timeCounter.expired())
+//-----------------------------------------------------------------------------
+// What 4: this function observe the timer
+// IN: nothing
+// POST: nothing
+// RETURN: TRUE if the timer is expired, FALSE else
+//-----------------------------------------------------------------------------
+
+
+
+
+
 
 typedef struct struct_i2c I2C_TYPE;
 struct struct_i2c
@@ -339,14 +605,6 @@ DISPLAY display;
 // POST: the display is cleared
 // RETURN: nothing
 //-----------------------------------------------------------------------------
-
-
-
-
-
-
-
-// Prototyps:
 
 void initDriver(char target);
 
