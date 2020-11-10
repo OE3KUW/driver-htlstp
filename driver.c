@@ -15,8 +15,19 @@
 #include "driver.h"
 
 //-----------------------------------------------------------------------------
-// intern Defines:
+//  intern Defines:
 //-----------------------------------------------------------------------------
+
+#define KEY3_PRESSED            0x80
+#define KEY2_PRESSED            0x40
+#define KEY1_PRESSED            0x20
+#define KEY0_PRESSED            0x10
+
+#define KEY3_RELEASED           0x08
+#define KEY2_RELEASED           0x04
+#define KEY1_RELEASED           0x02
+#define KEY0_RELEASED           0x01
+
 
 #define DISPLAY_8_BIT_MODE      0x30
 #define DISPLAY_4_BIT_MODE      0x20
@@ -30,6 +41,7 @@
 #define DISPLAY_SET_CURSOR      0x80
 #define DATA                    0x10
 
+
 #define I2C_ADDR                0b01000000 // MCP23008 Portexpander
 #define E	                    5
 #define RS	                    4
@@ -39,9 +51,24 @@
 #define DB7	                    3
 
 
+#define TIMER_START_VALUE       0xb100
+#define TIMER_START_VALUE_0     0xd3    // 0xd3  für 38.5 kHz
+
+// MOTOR:
+
+#define PWM_HOVER               93
+
+// iREd:
+#define I_COUNTER_MAX           12
+
+
+
+
 // ==========================  GLOBAL VARIABLES:   =============================
 
 char _useI2Cdisplay;
+char system_target;
+unsigned char iCounter;
 
 // ==========================  PROTOTYPS:   ====================================
 
@@ -58,6 +85,34 @@ unsigned char adc_get (void);
 //-----------------------------------------------------------------------------
 void eeprom_storeInt(int value, unsigned int address);
 int eeprom_getInt(unsigned int address);
+//-----------------------------------------------------------------------------
+char key_pressed(char k);
+char key_released(char k);
+void key_quit(void);
+char key_stillPressed(char k);
+//-----------------------------------------------------------------------------
+void timeCounter_start(int mSev);
+char timeCounter_expired(void);
+void timeCounter2_start(int mSev);
+char timeCounter2_expired(void);
+void timeCounter3_start(int mSev);
+char timeCounter3_expired(void);
+//-----------------------------------------------------------------------------
+void serial_send(char c);
+//char serial_receive(void); not needed ???
+void serial_storeMyCallBackFunction(void (*cb)(char));
+void _internalCallBackDoNothing(char c);
+//-----------------------------------------------------------------------------
+void motor_setSpeed(char s);
+void motor_setDiff(char d);
+void motor_stop(void);
+//-----------------------------------------------------------------------------
+void iRed_selectDirection(char d);
+void iRed_selectSide(char s);
+void iRed_selectQuarter(char n);
+void iRed_switchTransmitter(char onOff);
+char iRed_receivedSignal(void);
+void iRed_quit(void);
 //-----------------------------------------------------------------------------
 void i2cInit(void);
 void i2c_Write(char addr, char data);
@@ -91,54 +146,64 @@ void _wait_64_usec(void);
 void delay(int msec);
 //-----------------------------------------------------------------------------
 
+//*****************************************************************************
+//
+//
+//                           i n i t  D r i v e r
+//
+//
+//*****************************************************************************
 
 void initDriver(char target)
 {
-    CLKPR = 0b10000000;                // Prescaler change enable!
-    CLKPR = 0;                         // use 16 MHz - cycle time now 62.5 nsec
-    MCUCR = MCUCR|(1 << JTD);		   // JTAG disable
-    MCUCR = MCUCR|(1 << JTD);
+    CLKPR  = 0b10000000;               // Prescaler change enable!
+    CLKPR  = 0;                        // use 16 MHz - cycle time now 62.5 nsec
+    MCUCR  = MCUCR|(1 << JTD);		   // JTAG disable
+    MCUCR  = MCUCR|(1 << JTD);
+
+    system_target = target;
 
 //PORT B:
-    DDRB = 0xff;   // Leds
-    PORTB = 0;
+
+    DDRB   = 0xff;                      // Leds - Display
+    PORTB  = 0;
 
 //  PORT C:
-	DDRC  = (1<<DDC6);				   // PC6 ist #RST from the Portexpander
-    PORTC = (1<<PC7);                  // capture Interrupt	PORTC |= (1<<PC6);				   // Portexpander switched off
+
+	DDRC   = (1<<DDC6);				    // PC6 ist #RST from the Portexpander
+    PORTC  = (1<<PC7);                  // PC7 left wheel
 	PORTC |= (1<<PC6);
 
-#ifndef EL_ROBOT
-
+    if (system_target != EL_ROBOT)
+    {
 //  PORT D:
-    DDRD = 0xf0;   // used for the keys
+        DDRD   = 0xf0;                  // used for the keys
+        PORTD  = 0x0f;                  // pull ups
 
 //  PORT F:
-    DDRF = 0;      // read adc
-
-
-#else // for the EL ROBOTER:
+        DDRF   = 0;                     // read adc
+    }
+    else
+    {
 
 //  PORT D:
-    DDRD = 0xef;   // on PD4 0b11101111  Capture Interrupt - to we use this??????
+       DDRD   = 0xef;                  // PD4  left wheel
 
 //  PORT F:
-    DDRF = 0x60;    /* 0110 0000 F5, F6 controlls IRs */
+    DDRF  = 0x60;    // 0110 0000 F5, F6 controlls iRed  - F7 receives iRed
 
-// infra red controll:
-
-    // PORTF = 0x60; // BACK RIGHT
-    // PORTF = 0x0;  // FRONT LEFT
-    // PORTF = 0x20; // FRONT RIGHT
 
     PORTF = 0x40; // BACK LEFT
-    PORTF |= 0x80; // PortF7 = High
+    PORTF |= 0x80; // PortF7 = High   Pullup
 
 
-#endif // EL_ROBOT
+//###
+//# ??
+    }
+
 
 //-----------------------------------------------------------------------------
-//  leds:
+//  LEDS:
 //-----------------------------------------------------------------------------
 
     led.on          = led_on;
@@ -146,7 +211,7 @@ void initDriver(char target)
     led.barMeterLin = led_barMeterLin;
     led.number      = led_number;
 //-----------------------------------------------------------------------------
-//  beeper:
+//  BEEPER:
 //-----------------------------------------------------------------------------
 
     beeper.click    = beeper_click;
@@ -166,13 +231,86 @@ void initDriver(char target)
     adc.get = adc_get;
 
 //-----------------------------------------------------------------------------
-//  eeprom:
+//  E2PROM:
 //-----------------------------------------------------------------------------
 
     eeprom.getInt   = eeprom_getInt;
     eeprom.storeInt = eeprom_storeInt;
 
+//-----------------------------------------------------------------------------
+//  KEYS:
+//-----------------------------------------------------------------------------
 
+    key.last_keys     = 0x0f;
+    key.next_keys     = 0x0f;
+    key.flags         = 0;
+
+    key.pressed       = key_pressed;
+    key.released      = key_released;
+    key.quit          = key_quit;
+    key.stillPressed  = key_stillPressed;
+
+
+//-----------------------------------------------------------------------------
+//  TIMER:
+//-----------------------------------------------------------------------------
+
+    timeCounter.tenMsec  = timeCounter2.tenMsec = timeCounter3.tenMsec = 0;
+
+    timeCounter.start    = timeCounter_start;
+    timeCounter.expired  = timeCounter_expired;
+
+    timeCounter2.start   = timeCounter2_start;
+    timeCounter2.expired = timeCounter2_expired;
+
+    timeCounter3.start   = timeCounter3_start;
+    timeCounter3.expired = timeCounter3_expired;
+
+//-----------------------------------------------------------------------------
+//  UART SERIAL:
+//-----------------------------------------------------------------------------
+
+    UCSR1B = (1 << RXCIE1) | (1 << RXEN1)  | (1 << TXEN1);
+    UCSR1C = (1 << UCSZ11) | (1 << UCSZ10); // Use 8-bit character sizes
+
+    UBRR1H = 0;
+    UBRR1L = BOUD_RATE_9600;
+
+
+    serial.send = serial_send;
+    serial.storeMyCallBackFunction = serial_storeMyCallBackFunction;
+
+    serial.cb = _internalCallBackDoNothing;
+    serial.received = 0;
+
+    serial.flag = FALSE;
+
+//-----------------------------------------------------------------------------
+//  MOTOR:
+//-----------------------------------------------------------------------------
+
+    motor.setSpeed = motor_setSpeed;
+    motor.setDiff =  motor_setDiff;
+    motor.stop =     motor_stop;
+    motor.left = motor.right = PWM_HOVER;
+    motor.speed = motor.diff = 0;
+
+//-----------------------------------------------------------------------------
+//  I-RED:
+//-----------------------------------------------------------------------------
+
+    iRed.selectDirection      =  iRed_selectDirection;
+    iRed.selectSide           =  iRed_selectSide;
+    iRed.selectQuarter        =  iRed_selectQuarter;
+    iRed.switchTransmitter    =  iRed_switchTransmitter;
+    iRed.receivedSignal       =  iRed_receivedSignal;
+    iRed.quit                 =  iRed_quit;
+
+    iCounter = 0;
+
+//    iRed.switchTransmitter(OFF);
+//    iRed.quit();
+//    iRed.selectQuarter(1);
 
 
 //-----------------------------------------------------------------------------
@@ -189,7 +327,7 @@ void initDriver(char target)
     i2c.write = i2c_Write;
 
 //-----------------------------------------------------------------------------
-//  display:
+//  DISPLAY:
 //-----------------------------------------------------------------------------
 
     display.Linelength = ((target == DIS2_TEST) || (target == EL_ROBOT )) ? 16 : 8;
@@ -259,6 +397,59 @@ void initDriver(char target)
             display.clear       = _doNothing_Void;
     }
 
+//-----------------------------------------------------------------------------
+//  TIMER INTERRUPT:
+//-----------------------------------------------------------------------------
+
+//  Timer 0:  I-RED Signals:
+
+    TIMSK0 = (1 << TOIE0);
+	TCNT0  =  TIMER_START_VALUE_0;
+	TCCR0B = (1 << CS00);
+	TCCR0B = (1 << CS01);
+
+//  Timer 1:
+
+    TCCR1A = 0x0;
+    TCCR1B = 1<< CS11;
+    TIMSK1 = 1<<TOIE1;
+    TCNT1 = TIMER_START_VALUE;  // 10 msec periodic timer
+
+//  Timer 4 im Fast PWM Mode konfigurieren
+
+	TCCR4A = TCCR4A | (1<<PWM4B);
+	TCCR4C = TCCR4C | (1<<PWM4D);
+	TCCR4D = TCCR4D &~(1<<WGM41);
+	TCCR4D = TCCR4D &~(1<<WGM40);      // Fast PWM am OC4B und OC4D
+
+	TCCR4A = TCCR4A &~(1<<COM4B0);
+	TCCR4A = TCCR4A | (1<<COM4B1);
+	TCCR4C = TCCR4C &~(1<<COM4D0);
+	TCCR4C = TCCR4C | (1<<COM4D1);
+
+
+
+
+	TC4H   = 0x03;
+	OCR4C  = 0xE8;                     // f_PWM = f_CLK_T4/(1+OCR4C) = 62,5kHz/1000 = 62,5 Hz
+	TC4H   = 0x00;
+	OCR4B  = PWM_HOVER;                // Tastverhältnis am OC4B-Pin (PB6), PWM_rechts (retour_max = 62, vor_max = 125, stopp = 94)
+	OCR4D  = PWM_HOVER;                // Tastverhältnis am OC4D-Pin (PD7), PWM_links  (retour_max = 62, vor_max = 125, stopp = 94)
+
+
+	TCCR4B = TCCR4B | (1<<CS43);
+	TCCR4B = TCCR4B &~(1<<CS42);
+	TCCR4B = TCCR4B &~(1<<CS41);		// f_CLK_T4 = CLK_IO/Prescaler = 16MHz/256 = 62,5kHz
+	TCCR4B = TCCR4B | (1<<CS40);		// Timer4 Prescaler = 1, Start PWM
+
+
+
+
+//-----------------------------------------------------------------------------
+//  ENABLE ALL INTERRUPTS:
+//-----------------------------------------------------------------------------
+
+    sei();
 
 }  // end of initDriver
 
@@ -269,7 +460,7 @@ void initDriver(char target)
 //-----------------------------------------------------------------------------
 
 //-----------------------------------------------------------------------------
-// LED:
+//  LEDs:
 //-----------------------------------------------------------------------------
 
 void led_on(unsigned char x)
@@ -322,19 +513,18 @@ char x = 0;
 }
 
 //-----------------------------------------------------------------------------
-// BEEPER:
+//  BEEPER:
 //-----------------------------------------------------------------------------
 
 void beeper_click(void)
 {
-        PORTB |=  BEEPER_CLICK;
-        _wait_64_usec();
-        PORTB &= ~BEEPER_CLICK;
-
+    PORTB |=  BEEPER_CLICK;
+    _wait_64_usec();
+    PORTB &= ~BEEPER_CLICK;
 }
 
 //-----------------------------------------------------------------------------
-// ADC:
+//  ADC:
 //-----------------------------------------------------------------------------
 
 void adc_use (unsigned char x)
@@ -359,7 +549,7 @@ unsigned char adc_get (void)
 }
 
 //-----------------------------------------------------------------------------
-// BEEPER:
+//  E2PROM:
 //-----------------------------------------------------------------------------
 void eeprom_storeInt(int value, unsigned int address)
 {
@@ -387,9 +577,159 @@ uint8_t low, high;
     return (int)((high << 8) + low);
 }
 
+//-----------------------------------------------------------------------------
+//  KEYS:
+//-----------------------------------------------------------------------------
+
+char key_pressed(char k)
+{
+    char ret = 0;
+
+    if (k == KEY0) ret = (key.flags & KEY0_PRESSED) ? TRUE : FALSE;
+    if (k == KEY1) ret = (key.flags & KEY1_PRESSED) ? TRUE : FALSE;
+    if (k == KEY2) ret = (key.flags & KEY2_PRESSED) ? TRUE : FALSE;
+    if (k == KEY3) ret = (key.flags & KEY3_PRESSED) ? TRUE : FALSE;
+
+    return ret;
+}
+
+char key_released(char k)
+{
+    char ret = 0;
 
 
-//  i2C:
+    if (k == KEY0) ret = (key.flags & KEY0_RELEASED) ? TRUE : FALSE;
+    if (k == KEY1) ret = (key.flags & KEY1_RELEASED) ? TRUE : FALSE;
+    if (k == KEY2) ret = (key.flags & KEY2_RELEASED) ? TRUE : FALSE;
+    if (k == KEY3) ret = (key.flags & KEY3_RELEASED) ? TRUE : FALSE;
+
+    return ret;
+}
+
+void key_quit(void)
+{
+    key.flags = 0;
+}
+
+char key_stillPressed(char k)     ////// pressed
+{
+    char key;
+    char ret;
+
+    ret = FALSE;
+
+    key = PIND & 0x0f;
+
+    if ((key & k) == 0) ret = TRUE;   // key = KEY0 for e.q.
+
+    return ret;
+}
+
+
+
+//-----------------------------------------------------------------------------
+//  TIMER:
+//-----------------------------------------------------------------------------
+
+void timeCounter_start (int mSec) { timeCounter.tenMsec  = mSec / 10; }
+void timeCounter2_start(int mSec) { timeCounter2.tenMsec = mSec / 10; }
+void timeCounter3_start(int mSec) { timeCounter3.tenMsec = mSec / 10; }
+
+char timeCounter_expired (void)   { return (timeCounter.tenMsec  == 0) ? TRUE : FALSE; }
+char timeCounter2_expired(void)   { return (timeCounter2.tenMsec == 0) ? TRUE : FALSE; }
+char timeCounter3_expired(void)   { return (timeCounter3.tenMsec == 0) ? TRUE : FALSE; }
+
+//-----------------------------------------------------------------------------
+//  UART SERIAL:
+//-----------------------------------------------------------------------------
+
+
+//  SERIAL:
+
+void serial_send(char c)
+{
+     while ((UCSR1A & (1<<UDRE1))==0); UDR1 = c;
+}
+/*
+char serial_receive(void)
+{
+char r = 0;
+
+    return r;
+}
+*/
+void serial_storeMyCallBackFunction(void (*cb)(char))
+{
+     serial.cb = cb;
+}
+
+//-----------------------------------------------------------------------------
+//  MOTOR:
+//-----------------------------------------------------------------------------
+
+void motor_setSpeed(char s)
+{
+    motor.speed = s;
+}
+void motor_setDiff(char d)
+{
+    motor.diff = d;
+}
+void motor_stop(void)
+{
+    motor.speed = motor.diff = 0;
+}
+
+//-----------------------------------------------------------------------------
+//  I-RED:
+//-----------------------------------------------------------------------------
+
+// diese nächsten drei Funktionen machen nicht was sie sollen..
+
+void iRed_selectDirection(char d)
+{
+    if (d == IRED_BACK) PORTF |= IRED_BACK; else    PORTF &= ~IRED_BACK;
+    PORTF |= 0x80;
+}
+
+void iRed_selectSide(char s)
+{
+    if (s == IRED_RIGHT) PORTF |= IRED_RIGHT; else  PORTF &= ~IRED_RIGHT;
+    PORTF |= 0x80;
+
+}
+
+void iRed_selectQuarter(char n)
+{
+    switch (n)
+    {
+        case 0: PORTF |= (IRED_FRONT + IRED_RIGHT); PORTF &= ~(IRED_FRONT + IRED_RIGHT); break;
+        case 1: PORTF |= (IRED_BACK  + IRED_RIGHT); PORTF &= ~(IRED_BACK  + IRED_RIGHT); break;
+        case 2: PORTF |= (IRED_FRONT + IRED_LEFT);  PORTF &= ~(IRED_FRONT + IRED_LEFT);  break;
+        case 3: PORTF |= (IRED_BACK  + IRED_LEFT);  PORTF &= ~(IRED_BACK  + IRED_LEFT);  break;
+    }
+    PORTF |= 0x80;
+}
+
+void iRed_switchTransmitter(char onOff)
+{
+    iRed.transmit = onOff;
+}
+
+char iRed_receivedSignal(void)
+{
+    return iRed.flag;
+}
+
+void iRed_quit(void)
+{
+    iRed.flag = FALSE;
+}
+
+
+//-----------------------------------------------------------------------------
+//  I2C:
+//-----------------------------------------------------------------------------
 
 void i2cInit(void)
 {
@@ -451,7 +791,8 @@ void _doNothing_Int(int i)              {}
 void _doNothing_Float(float x)          {}
 void _doNothing_String(char * s)        {}
 void _doNothing_Array_Char(char s[], char space) {}
-void _internalCallBackDoNothing(char c) { }
+// serial callback default function
+void _internalCallBackDoNothing(char c) {}
 
 // display functions:
 
@@ -736,4 +1077,126 @@ void delay(int msec)
     msec <<= 4;  //
     for(; msec > 0 ; msec--) _wait_64_usec();
 }
+
+
+//-----------------------------------------------------------------------------
+//
+//  ALL INTERRUPTS:
+//
+//-----------------------------------------------------------------------------
+
+
+//-----------------------------------------------------------------------------
+//  UART SERIAL:
+//-----------------------------------------------------------------------------
+
+ISR(USART1_RX_vect) // Uart Empfang abgeschlossen
+{
+   serial.received = UDR1; // Fetch the received byte value into the variable "ByteReceived"
+   serial.flag = TRUE;
+   serial.cb(serial.received);
+}
+
+
+
+ISR(USART1_TX_vect) // Uart Empfang abgeschlossen
+{
+    // do nothing
+}
+
+//-----------------------------------------------------------------------------
+//  TIMER 0 - infra red controll
+//-----------------------------------------------------------------------------
+
+
+ISR(TIMER0_OVF_vect)
+{
+    TCNT0 = TIMER_START_VALUE_0;
+
+    PORTD ^= (iRed.transmit == ON)? 0x20 : 0; // if transmit == ON toggle PD5
+
+//    if ((PINF & 0x80) == 0) iRed.flag = TRUE;
+
+    if ((PINF & 0x80) == 0)
+    {
+        iCounter++;
+
+        if (iCounter > I_COUNTER_MAX)
+        {
+            iCounter = I_COUNTER_MAX;
+            iRed.flag = TRUE;
+
+        }
+
+    }
+    else
+    {
+        if (iCounter) iCounter--;
+    }
+}
+
+//-----------------------------------------------------------------------------
+//  TIMER 1 - 10 msec timer - interrupt
+//-----------------------------------------------------------------------------
+
+ISR(TIMER1_OVF_vect)
+{
+    TCNT1 = TIMER_START_VALUE;
+
+    if (timeCounter. tenMsec) timeCounter. tenMsec--;
+    if (timeCounter2.tenMsec) timeCounter2.tenMsec--;
+    if (timeCounter3.tenMsec) timeCounter3.tenMsec--;
+
+    OCR4D = motor.left  = PWM_HOVER + motor.speed + motor.diff;
+    OCR4B = motor.right = PWM_HOVER - motor.speed + motor.diff;
+
+if (system_target != EL_ROBOT)
+{
+    key.next_keys = PIND & 0x0f;
+
+    if (((key.next_keys & KEY0) == 0) && ((key.last_keys & KEY0) == KEY0)) key.flags |= KEY0_PRESSED;
+    if (((key.next_keys & KEY1) == 0) && ((key.last_keys & KEY1) == KEY1)) key.flags |= KEY1_PRESSED;
+    if (((key.next_keys & KEY2) == 0) && ((key.last_keys & KEY2) == KEY2)) key.flags |= KEY2_PRESSED;
+    if (((key.next_keys & KEY3) == 0) && ((key.last_keys & KEY3) == KEY3)) key.flags |= KEY3_PRESSED;
+
+    if (((key.last_keys & KEY0) == 0) && ((key.next_keys & KEY0) == KEY0)) key.flags |= KEY0_RELEASED;
+    if (((key.last_keys & KEY1) == 0) && ((key.next_keys & KEY1) == KEY1)) key.flags |= KEY1_RELEASED;
+    if (((key.last_keys & KEY2) == 0) && ((key.next_keys & KEY2) == KEY2)) key.flags |= KEY2_RELEASED;
+    if (((key.last_keys & KEY3) == 0) && ((key.next_keys & KEY3) == KEY3)) key.flags |= KEY3_RELEASED;
+
+    key.last_keys = key.next_keys;
+}
+else
+{
+
+}
+
+// hier wird weiter entwickelt...
+
+/*    if ((PIND & 0x10) == 0x10)
+    {
+        PORTB |= 0x01;
+    }
+    else
+    {
+        PORTB &= 0xfe;
+    }
+    */
+
+
+    //PORTD ^= 0xff;
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
 
