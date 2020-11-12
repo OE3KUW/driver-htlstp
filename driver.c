@@ -401,6 +401,16 @@ void initDriver(char target)
 //  TIMER INTERRUPT:
 //-----------------------------------------------------------------------------
 
+//  Timer 1:
+
+    TCCR1A = 0x0;
+    TCCR1B = 1<< CS11;
+    TIMSK1 = 1<<TOIE1;
+    TCNT1 = TIMER_START_VALUE;  // 10 msec periodic timer
+
+    if (target == EL_ROBOT)
+    {
+
 //  Timer 0:  I-RED Signals:
 
     TIMSK0 = (1 << TOIE0);
@@ -408,12 +418,6 @@ void initDriver(char target)
 	TCCR0B = (1 << CS00);
 	TCCR0B = (1 << CS01);
 
-//  Timer 1:
-
-    TCCR1A = 0x0;
-    TCCR1B = 1<< CS11;
-    TIMSK1 = 1<<TOIE1;
-    TCNT1 = TIMER_START_VALUE;  // 10 msec periodic timer
 
 //  Timer 4 im Fast PWM Mode konfigurieren
 
@@ -442,7 +446,7 @@ void initDriver(char target)
 	TCCR4B = TCCR4B &~(1<<CS41);		// f_CLK_T4 = CLK_IO/Prescaler = 16MHz/256 = 62,5kHz
 	TCCR4B = TCCR4B | (1<<CS40);		// Timer4 Prescaler = 1, Start PWM
 
-
+    } // i2R and PWM only in use for EL_ROBOT !
 
 
 //-----------------------------------------------------------------------------
