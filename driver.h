@@ -57,9 +57,15 @@
 #define ADC0                           0x0
 #define ADC1                           0x01
 #define ADC4                           0x04
-#define ADC5                           0x05  // dont use them! (infra red sensor)
-#define ADC6                           0x06  // dont use them! (infra red sensor)
-#define ADC7                           0x07
+
+//#define ADC5                         0x05  // dont use this! (infra red sensor)
+//#define ADC6                         0x06  // dont use this! (infra red sensor)
+//#define ADC7                         0x07  // dont use this! (wheel control)
+
+// note: ADC5,ADC6 and ADC7 are not in use, 'cause ADC5 and ADC6 are used for
+// the infra red sensor - they are using the same port pins
+// and port pi 7 is used for the wheel control
+
 
 #define ADC_VOLTAGE                    28.6  // depends on settings
 
@@ -77,11 +83,11 @@
 
 
 // braucht das wer? - falls jka - wer?
-#define NO_DISPLAY_AVAILABLE           0
-#define DISPLAY_AVAILABLE              1
-#define DISPLAY_WITH_2_LINES           2
-#define DISPLAY_I2C_CONNECTED          3
-#define DISPLAY_2LINES_I2C_CONNECTED   4
+//#define NO_DISPLAY_AVAILABLE           0
+//#define DISPLAY_AVAILABLE              1
+//#define DISPLAY_WITH_2_LINES           2
+//#define DISPLAY_I2C_CONNECTED          3
+//#define DISPLAY_2LINES_I2C_CONNECTED   4
 
 
 //-----------------------------------------------------------------------------
@@ -171,14 +177,16 @@ BEEPER_TYPE beeper;
 typedef struct struct_adc ADC_TYPE;
 struct struct_adc
 {
-    void (*use)(unsigned char);
-    unsigned char (*get)(void);
+//    void (*use)(unsigned char);
+    unsigned char (*get)(unsigned char);
+    unsigned char MeasuredValues[5];  //ADC0, ADC1, x, x, ADC4
 };
 ADC_TYPE adc;
 
 // usage:
 //-----------------------------------------------------------------------------
 // adc.use(ADC0);
+/** this function is not in use anymore !!! **/
 //-----------------------------------------------------------------------------
 // What4:  this function selects an ADC-Pin, for e.g. ADC0 ---> PORTF0
 // IN:     ADC0 - choose one of the switchs:
@@ -190,14 +198,17 @@ ADC_TYPE adc;
 //-----------------------------------------------------------------------------
 
 //-----------------------------------------------------------------------------
-// x = adc.get();
+// x = adc.get(ADC0);
 //-----------------------------------------------------------------------------
 // What 4:  get the measured adc - level
-// IN:      nothing
+// IN:      ADC0, ADC1 or ADC4 - from which pin should the level be measured
 // POST:    nothing
 // RETURN:  x  from type unsigned char - 0 up to 255
+// NOTE: the hardware profides only one analog digital converter
+// a multiplexer selectes the port pin connection from the adc to the
+// used port pin. This is handeld by the timer interrupt.
+// means all 10 msec a next portpin will be connected to be measured
 //-----------------------------------------------------------------------------
-
 
 typedef struct struct_eeprom EEPROM_TYPE;
 struct struct_eeprom
@@ -435,14 +446,51 @@ IRED_TYPE iRed;
 // RETURN: nothing
 //-----------------------------------------------------------------------------
 
+typedef struct struct_lineFollower LINE_FOLLOWER_TYPE;
+struct struct_lineFollower
+{
+    void (*on)(void);
+    void (*off)(void);
+    unsigned char (*right)(void);
+    unsigned char (*left)(void);
+};
+LINE_FOLLOWER_TYPE lineF;
 
+//-----------------------------------------------------------------------------
+// lineF.on();
+//-----------------------------------------------------------------------------
+// What 4: this function turns the line-follower on
+// IN: nothing
+// POST: the line-follower LED is switched on
+// RETURN: nothing
+//-----------------------------------------------------------------------------
 
+//-----------------------------------------------------------------------------
+// lineF.ff();
+//-----------------------------------------------------------------------------
+// What 4: this function turns the line-follower off
+// IN: nothing
+// POST: the line-follower LED is switched off
+// RETURN: nothing
+//-----------------------------------------------------------------------------
 
+//-----------------------------------------------------------------------------
+// lineF.right();
+//-----------------------------------------------------------------------------
+// What 4: measure the refelction value of the line-follower
+// IN: nothing
+// POST: nothing
+// RETURN: returns the right line-follower value
+//-----------------------------------------------------------------------------
 
-
-
-
-
+//-----------------------------------------------------------------------------
+// lineF.left();
+//-----------------------------------------------------------------------------
+// What 4: measure the refelction value of the line-follower
+// IN: nothing
+// POST: nothing
+// RETURN: returns the left line-follower value
+//-----------------------------------------------------------------------------
 
 
 typedef struct struct_timeCounter TIME_COUNTER_TYPE;
