@@ -80,8 +80,8 @@ void led_number(unsigned char i);
 //-----------------------------------------------------------------------------
 void beeper_click(void);
 //-----------------------------------------------------------------------------
-void adc_use (unsigned char x);
-unsigned char adc_get (void);
+// void adc_use (unsigned char x); not in use furthermore!
+unsigned char adc_get(unsigned char);
 //-----------------------------------------------------------------------------
 void eeprom_storeInt(int value, unsigned int address);
 int eeprom_getInt(unsigned int address);
@@ -113,6 +113,11 @@ void iRed_selectQuarter(char n);
 void iRed_switchTransmitter(char onOff);
 char iRed_receivedSignal(void);
 void iRed_quit(void);
+//-----------------------------------------------------------------------------
+void lineF_on(void);
+void lineF_off(void);
+unsigned char lineF_right(void);
+unsigned char lineF_left(void);
 //-----------------------------------------------------------------------------
 void i2cInit(void);
 void i2c_Write(char addr, char data);
@@ -227,8 +232,10 @@ void initDriver(char target)
     ADCSRA |= (1 << ADEN);
     ADCSRA |= (1 << ADSC);
 
-    adc.use = adc_use;
+    //adc.use = adc_use;  not in use further more.
     adc.get = adc_get;
+    adc.MeasuredValues[ADC0] = 0xff;
+
 
 //-----------------------------------------------------------------------------
 //  E2PROM:
@@ -312,6 +319,14 @@ void initDriver(char target)
 //    iRed.quit();
 //    iRed.selectQuarter(1);
 
+//-----------------------------------------------------------------------------
+//  line follower:
+//-----------------------------------------------------------------------------
+
+    lineF.on    = lineF_on;
+    lineF.off   = lineF_off;
+    lineF.right = lineF_right;
+    lineF.left  = lineF_left;
 
 //-----------------------------------------------------------------------------
 //  i2c-Container:
@@ -531,25 +546,27 @@ void beeper_click(void)
 //  ADC:
 //-----------------------------------------------------------------------------
 
-void adc_use (unsigned char x)
+// not in use furthermore  --- will be deleted next time
+/** void adc_use (unsigned char x)
 {
      if ((x & 04) == 0x4) ADMUX |= (1 << MUX2); else ADMUX &= ~(1 << MUX2);
      if ((x & 02) == 0x2) ADMUX |= (1 << MUX1); else ADMUX &= ~(1 << MUX1);
      if ((x & 01) == 0x1) ADMUX |= (1 << MUX0); else ADMUX &= ~(1 << MUX0);
 
-    /* ADMUX =  REFS1 | REFS0 | ADLAR | MUX4 | MUX3 | MUX2 | MUX1 | MUX0 */
-    /** ADC0 : 000
-      * ADC1 : 001
-      * ADC4 : 100
-      * ADC5 : 101
-      * ADC6 : 110
-      * ADC7 : 111  = MUX2 + MUX1 + MUX0
-      **/
-}
+     ADMUX =  REFS1 | REFS0 | ADLAR | MUX4 | MUX3 | MUX2 | MUX1 | MUX0
+     ADC0 : 000
+     ADC1 : 001
+     ADC4 : 100
+     ADC5 : 101
+     ADC6 : 110
+     ADC7 : 111  = MUX2 + MUX1 + MUX0
 
-unsigned char adc_get (void)
+}
+**/
+
+unsigned char adc_get(unsigned char x)
 {
-    return ADCH;
+    return adc.MeasuredValues[x];
 }
 
 //-----------------------------------------------------------------------------
@@ -729,6 +746,31 @@ void iRed_quit(void)
 {
     iRed.flag = FALSE;
 }
+
+//-----------------------------------------------------------------------------
+//  line Follower:
+//-----------------------------------------------------------------------------
+
+void lineF_on(void)
+{
+    PORTD |= 0x40;
+}
+
+void lineF_off(void)
+{
+    PORTD &= ~0x40;
+}
+
+unsigned char lineF_right(void)
+{
+    return adc.get(ADC4);
+}
+
+unsigned char lineF_left(void)
+{
+    return adc.get(ADC1);
+}
+
 
 
 //-----------------------------------------------------------------------------
@@ -973,19 +1015,19 @@ int i = 0;
     }
 }
 
-void display_writeInt(int i)
+void display_writeInt(int i)    // writes 4 digits: "+999"
 {
 char neg = FALSE;
 
-        if (i > 999)  i =  999;
-        if (i < -999) i = -999;
+        if (i > 999)  i =  999;  // limitation
+        if (i < -999) i = -999;  // limitation
 
         if (i < 0)
         {
             neg = TRUE; i = -i;
         }
 
-        ((neg == TRUE) && (i >=100)) ? display_writeChar('-') : display_writeChar(' ');
+        ((neg == TRUE) && (i >=100)) ? display_writeChar('-') : display_writeChar('+');
 
         if (i < 100)
             ((neg == TRUE) && (i >= 10)) ? display_writeChar('-') : display_writeChar(' ');
@@ -1061,13 +1103,6 @@ void display_clear(void)
     display.writeString2ndLine("                ");
 }
 
-
-
-
-
-
-
-
 //  WAITING TIMES - SMALLES UNIT  50 micro seconds
 void _wait_64_usec(void)
 {
@@ -1117,7 +1152,14 @@ ISR(TIMER0_OVF_vect)
 {
     TCNT0 = TIMER_START_VALUE_0;
 
-    PORTD ^= (iRed.transmit == ON)? 0x20 : 0; // if transmit == ON toggle PD5
+    if (iRed.transmit == ON)
+    {
+        PORTD ^= 0x20;
+    }
+    else
+    {
+        PORTD &= ~0x20;
+    }
 
 //    if ((PINF & 0x80) == 0) iRed.flag = TRUE;
 
@@ -1145,6 +1187,8 @@ ISR(TIMER0_OVF_vect)
 
 ISR(TIMER1_OVF_vect)
 {
+static unsigned char x = ADC0;
+
     TCNT1 = TIMER_START_VALUE;
 
     if (timeCounter. tenMsec) timeCounter. tenMsec--;
@@ -1153,6 +1197,23 @@ ISR(TIMER1_OVF_vect)
 
     OCR4D = motor.left  = PWM_HOVER + motor.speed + motor.diff;
     OCR4B = motor.right = PWM_HOVER - motor.speed + motor.diff;
+
+    adc.MeasuredValues[x] = ADCH;
+
+    x = (x == ADC0) ? ADC1 : (x == ADC1) ? ADC4 : ADC0;
+
+    if ((x & 04) == 0x4) ADMUX |= (1 << MUX2); else ADMUX &= ~(1 << MUX2);
+    if ((x & 02) == 0x2) ADMUX |= (1 << MUX1); else ADMUX &= ~(1 << MUX1);
+    if ((x & 01) == 0x1) ADMUX |= (1 << MUX0); else ADMUX &= ~(1 << MUX0);
+
+    /* ADMUX =  REFS1 | REFS0 | ADLAR | MUX4 | MUX3 | MUX2 | MUX1 | MUX0 */
+    /** ADC0 : 000
+      * ADC1 : 001
+      * ADC4 : 100
+      * ADC5 : 101
+      * ADC6 : 110
+      * ADC7 : 111  = MUX2 + MUX1 + MUX0
+      **/
 
 if (system_target != EL_ROBOT)
 {
@@ -1172,8 +1233,24 @@ if (system_target != EL_ROBOT)
 }
 else
 {
+    // adc measurement:
+    PORTB &=0xcf;
 
+    if      (adc.MeasuredValues[ADC0] > 200) PORTB |= 0x10;
+    else if (adc.MeasuredValues[ADC0] > 180) PORTB |= 0x30;
+    else
+    {
+                                                 PORTB |= 0x20;
+              // lock down .... needed
+
+              cli();
+              for (;;);
+
+    }
 }
+
+
+
 
 // hier wird weiter entwickelt...
 
