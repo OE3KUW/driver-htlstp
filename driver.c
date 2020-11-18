@@ -916,6 +916,15 @@ char temp = command, x = 0xC0;	// prepare for P7 and P6 has to be HIGH for PCF85
 
 void display_writeChar(char a)
 {
+    /*switch (a)
+    {
+        case -10: case -42: a = -17; break; // ö
+        case  -4: case -36: a = -11; break; // ü
+        case -28: case -60: a = -31; break; // ä
+        case -33:           a = -30; break; // ß
+    }
+*/
+
     _writeCommand4(DATA, a);
     display.shownCursorPosition++;
 
@@ -959,14 +968,13 @@ int j = 0;
 
             switch (*(s+i))
             {
-                case  -68: *(s+i) = 0xf5; /*ö*/ break;
+                case  -68: *(s+i) = 0xf5; /*ö*/ break; // -17 ö
+                case -100: *(s+i) = 0xf5; /*ü*/ break; // -11 ü
                 case  -74: *(s+i) = 0xef; /*ö*/ break;
-                case  -92: *(s+i) = 0xe1; /*ä*/ break;
-                case  -97: *(s+i) = 0xe2; /*ß*/ break;
+                case  -92: *(s+i) = 0xe1; /*ä*/ break; // -31 ä
                 case -124: *(s+i) = 0xe1; /*ä*/ break;
                 case -106: *(s+i) = 0xef; /*ö*/ break;
-                case -100: *(s+i) = 0xf5; /*ü*/ break;
-
+                case  -97: *(s+i) = 0xe2; /*ß*/ break; // -30 ß
             }
         }
 
@@ -1027,7 +1035,7 @@ char neg = FALSE;
             neg = TRUE; i = -i;
         }
 
-        ((neg == TRUE) && (i >=100)) ? display_writeChar('-') : display_writeChar('+');
+        ((neg == TRUE) && (i >=100)) ? display_writeChar('-') : display_writeChar(' ');
 
         if (i < 100)
             ((neg == TRUE) && (i >= 10)) ? display_writeChar('-') : display_writeChar(' ');
@@ -1084,17 +1092,16 @@ void display_showCursor(void)
 
 void display_storeSymbol(char s[], char space)
 {
-
     char base = space << 3;
     int i;
 
     for (i = 0; i < 8; i++)
     {
         _writeCommand4(0, 0x40 + base + i);
-        _writeCommand4(DATA, s[i]&0x1f);
-    }
 
-    _writeCommand4(0, 0);  // switch back from DATA!
+        _writeCommand4(DATA, s[i] & 0x1f);
+    }
+    _writeCommand4(0, DISPLAY_SET_CURSOR);  // switch back from DATA!  set Cursor position to zero
 }
 
 void display_clear(void)
@@ -1236,15 +1243,17 @@ else
     // adc measurement:
     PORTB &=0xcf;
 
-    if      (adc.MeasuredValues[ADC0] > 200) PORTB |= 0x10;
-    else if (adc.MeasuredValues[ADC0] > 180) PORTB |= 0x30;
+    if      (adc.MeasuredValues[ADC0] > 200) PORTB |= 0x10;  // 7.0 V
+    else if (adc.MeasuredValues[ADC0] > 180) PORTB |= 0x30;  // 6.3 V
     else
     {
                                                  PORTB |= 0x20;
               // lock down .... needed
+#ifdef LOCK_DOWN
 
               cli();
               for (;;);
+#endif
 
     }
 }
