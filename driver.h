@@ -639,7 +639,6 @@ DISPLAY display;
 //                      0b00010001,
 //                      0b00010001,
 //                      0b00011111,
-//                      0b00010001,
 //                      0b00010001};  creates a symbol siilar to an 'A'
 // POST: a later display.writeChar(n);  shows the stored special symbol
 // RETURN:nothing
@@ -650,7 +649,7 @@ DISPLAY display;
 //-----------------------------------------------------------------------------
 // What 4: this functin clears the disply
 // IN: nothing
-// POST: the display is cleared
+// POST: the cursor position is set to 0 !!!
 // RETURN: nothing
 //-----------------------------------------------------------------------------
 
