@@ -1,55 +1,34 @@
-/*
- *    driver testprogramm
- */
+/***************************************************************************************
+ * DRIVE ROBOT
+ *
+ **************************************************************************************/
 
 #include <avr/io.h>
 #include "driver.h"
-
 
 #define STATE_0                         0
 #define STATE_1                         1
 #define STATE_2                         2
 #define STATE_3                         3
 
-
 int flatten(int x);
-void Receive(char c);
-char Char;
-char oldChar;
 
 int main(void)
 {
 unsigned char x;
+unsigned int n;
 int state;
 
     initDriver(EL_ROBOT);
 
-    led.off(FLIP);
 
     display.writeString("          V     ");
     display.hideCursor();
 
-    Char = oldChar = 0;
 
-    serial.storeMyCallBackFunction(Receive);
-
-    serial.send(10);
-    serial.send(13);
-    serial.send('s');
-    serial.send('t');
-    serial.send(':');
-    serial.send('A');
-    serial.send('r');
-    serial.send('t');
-    serial.send('!');
-    serial.send(10);
-    serial.send(13);
-
-    led.on(DUAL_GREEN);
-
-    lineF.off();
-
-    state = 0;
+    state = STATE_0;
+    n = 0;
+    timeCounter.start(1000);
 
     for(;;)
     {
@@ -65,66 +44,58 @@ int state;
         display.setCursor(12);
         display.writeInt(motor.right);
 
-        display.setCursor(21);
-        display.writeInt(x);
-
-        x = lineF.left();
-        display.setCursor(16);
-        display.writeInt(x);
-
-        x = lineF.right();
         display.setCursor(28);
-        display.writeInt(x);
+        display.writeInt(n);
 
 
         switch (state)
         {
             case STATE_0:
-                if (iRed.receivedSignal())
+                if (timeCounter.expired())
                 {
-                    serial.send('i');
-                    serial.send('R');
-                    serial.send('e');
-                    serial.send('d');
-                    serial.send(10);
-                    serial.send(13);
-                    iRed.quit();
-                    beeper.click();
-                    timeCounter.start(3000);
-                    motor.setSpeed(-7);   // gerade aus
+
+                    timeCounter.start(1500);  //1.5 Sekunden
+                    motor.setSpeed(-15);   // gerade aus
+                    motor.setDiff(0);      // nicht drehen
                     state = STATE_1;
+                    display.writeString2ndLine("STATE 1");
+                    n++;
                 }
             break;
 
             case STATE_1:
                 if (timeCounter.expired())
                 {
-                    beeper.click();
-                    timeCounter.start(2000);
-                    motor.setSpeed(0);
-                    motor.setDiff(5);      // 2 Sec drehen
+                    timeCounter.start(2000);  // 2 Sekunden
+                    motor.setSpeed(0);     // nur
+                    motor.setDiff(5);      // drehen
                     state = STATE_2;
+                    display.writeString2ndLine("STATE 2");
+                    n++;
                 }
             break;
 
             case STATE_2:
                 if (timeCounter.expired())
                 {
-                    beeper.click();
-                    timeCounter.start(3000);
-                    motor.setDiff(0);
-                    motor.setSpeed(-7);      // 5 sec zurück
+                    timeCounter.start(1500);  // 1.5 Sekunden
+                    motor.setSpeed(7);   // zurück
+                    motor.setDiff(0);    // nicht drehen
                     state = STATE_3;
+                    display.writeString2ndLine("STATE 3");
+                    n++;
                 }
             break;
 
             case STATE_3:
                 if (timeCounter.expired())
                 {
-                    beeper.click();
-                    motor.setDiff(0);
-                    motor.setSpeed(0);      // und stehen
+                    timeCounter.start(5000); // 5 Sekunden
+                    motor.setSpeed(12);      // drehen und fahren
+                    motor.setDiff(-3);       // drehen
                     state = STATE_0;
+                    display.writeString2ndLine("STATE 0");
+                    n++;
                 }
             break;
 
@@ -150,42 +121,3 @@ int val;
     return val >> 4;
 
 }
-
-
-void Receive(char c)
-{
-
-/*   if (c == 's') motor.setSpeed(motor.speed - 1);
-   if (c == 'S') motor.setSpeed(motor.speed + 1);
-   if (c == 'd') motor.setDiff (motor.diff - 1);
-   if (c == 'D') motor.setDiff (motor.diff + 1);
-   if (c == 'c') motor.stop    ();
-
-*/
-    if (c == 's') motor.setSpeed(motor.speed - 1);
-    if (c == 'S') motor.setSpeed(motor.speed + 1);
-    if (c == 'd') motor.setDiff(motor.diff - 1);
-    if (c == 'D') motor.setDiff(motor.diff + 1);
-    if (c == '.') motor.stop    ();
-
-    if (c == 'i') iRed.switchTransmitter(ON);
-    if (c == 'o') iRed.switchTransmitter(OFF);
-
-    if (c == 'u') iRed.selectDirection(IRED_FRONT);
-    if (c == 'U') iRed.selectDirection(IRED_BACK);
-
-    if (c == 'p') iRed.selectSide(IRED_LEFT);
-    if (c == 'P') iRed.selectSide(IRED_RIGHT);
-
-    if (c == '1') {iRed.selectQuarter(1); led.number(1);}
-    if (c == '2') {iRed.selectQuarter(2); led.number(2);}
-    if (c == '3') {iRed.selectQuarter(3); led.number(3);}
-    if (c == '4') {iRed.selectQuarter(0); led.number(0);}
-
-    led.on(FLIP);
-    Char = c;
-
-}
-
-
-
