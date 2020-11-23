@@ -580,7 +580,29 @@ uint8_t low, high;
     address %= 0x200;  // maybee there is more space available....
 
     low = value & 0xff;
+
+    /** --------------------------------------------------------------------------------------- **/
+
     eeprom_write_byte((uint8_t*)address, low);
+
+    /** note: if you got here, in the line above, an error (undefined reference to ...  )       **/
+    /**                 follow this instruction to solv this error                              **/
+    /**                                                                                         **/
+    /** 1. open the pulldown-,menu "Settings" and choose "Compiler"                             **/
+    /** 2. check - is the selected compiler the "GNU AVR GCC Compiler" - if not - select them   **/
+    /** 3. choose "Search directories" - it's a tab - in german called "Reiter"                 **/
+    /** 4. and here in this page choose "Search directories" - and there choose "Linker"        **/
+    /**    -- carefull: choose "Linker" not "LinkerSettings"                                    **/
+    /** 5. if you find this line there:                                                         **/
+    /** c:\Program Files(x86)\WinAVR-20100110\avr\lib    - than change it, add 32 !             **/
+    /** c:\Program Files(x86)\WinAVR-20100110\avr32\lib                                         **/
+    /** 6. store the chance by pressing the "ok" - button on the right down corner of the menue **/
+    /** 7: rebuild th whole programm - thast the icon with the two blue rounded arrows          **/
+    /**    - not the gear-wheel (= "Zahnrad")                                                   **/
+    /**                                                        the errors should be solved. :-) **/
+    /** --------------------------------------------------------------------------------------- **/
+
+
     high = (value >> 8) & 0xff;
     eeprom_write_byte((uint8_t*)address + 1, high);
 }
@@ -1102,6 +1124,7 @@ void display_storeSymbol(char s[], char space)
         _writeCommand4(DATA, s[i] & 0x1f);
     }
     _writeCommand4(0, DISPLAY_SET_CURSOR);  // switch back from DATA!  set Cursor position to zero
+    display_setCursor(display.shownCursorPosition);
 }
 
 void display_clear(void)
@@ -1249,6 +1272,7 @@ else
     {
                                                  PORTB |= 0x20;
               // lock down .... needed
+
 #ifdef LOCK_DOWN
 
               cli();
@@ -1257,9 +1281,6 @@ else
 
     }
 }
-
-
-
 
 // hier wird weiter entwickelt...
 
