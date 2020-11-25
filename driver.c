@@ -42,13 +42,15 @@
 #define DATA                    0x10
 
 
-#define I2C_ADDR                0b01000000 // MCP23008 Portexpander
+#define I2C_ADDR_PE_ROBOT       0b01000000 // MCP23008 Portexpander
 #define E	                    5
 #define RS	                    4
 #define DB4	                    0
 #define DB5	                    1
 #define DB6	                    2
 #define DB7	                    3
+
+#define I2C_ADDR_PE_DISPLAY     0b01001110 // 0x27 + Write (W = 0) PORT EXPANDER on Displays
 
 
 #define TIMER_START_VALUE       0xb100
@@ -70,6 +72,8 @@ char _useI2Cdisplay;
 char system_target;
 unsigned char iCounter;
 
+int debug;
+
 // ==========================  PROTOTYPS:   ====================================
 
 //-----------------------------------------------------------------------------
@@ -88,15 +92,19 @@ int eeprom_getInt(unsigned int address);
 //-----------------------------------------------------------------------------
 char key_pressed(char k);
 char key_released(char k);
-void key_quit(void);
+void key_acknowledge(void);
 char key_stillPressed(char k);
 //-----------------------------------------------------------------------------
 void timeCounter_start(int mSev);
 char timeCounter_expired(void);
+int  timeCounter_remaining(void);
 void timeCounter2_start(int mSev);
 char timeCounter2_expired(void);
+int  timeCounter2_remaining(void);
 void timeCounter3_start(int mSev);
 char timeCounter3_expired(void);
+int  timeCounter3_remaining(void);
+
 //-----------------------------------------------------------------------------
 void serial_send(char c);
 //char serial_receive(void); not needed ???
@@ -112,15 +120,16 @@ void iRed_selectSide(char s);
 void iRed_selectQuarter(char n);
 void iRed_switchTransmitter(char onOff);
 char iRed_receivedSignal(void);
-void iRed_quit(void);
+void iRed_acknowledge(void);
 //-----------------------------------------------------------------------------
 void lineF_on(void);
 void lineF_off(void);
 unsigned char lineF_right(void);
 unsigned char lineF_left(void);
 //-----------------------------------------------------------------------------
-void i2cInit(void);
+void i2cInit(char t);
 void i2c_Write(char addr, char data);
+void i2c_WriteDis(char addr, char data);
 void i2c_Start(void);
 int  i2c_Wait(void);
 void i2c_Stop(void);
@@ -179,31 +188,34 @@ void initDriver(char target)
     PORTC  = (1<<PC7);                  // PC7 left wheel
 	PORTC |= (1<<PC6);
 
-    if (system_target != EL_ROBOT)
+    switch (target)
     {
+        case EL_TEST_BOARD:  case DIS_TEST: case DIS2_TEST:
 //  PORT D:
-        DDRD   = 0xf0;                  // used for the keys
-        PORTD  = 0x0f;                  // pull ups
-
+            DDRD   = 0xf0;              // used for the keys
+            PORTD  = 0x0f;              // pull ups
 //  PORT F:
-        DDRF   = 0;                     // read adc
-    }
-    else
-    {
+            DDRF   = 0;                 // read adc
+        break;
 
+        case DIS_I2C:
 //  PORT D:
-       DDRD   = 0xef;                  // PD4  left wheel
-
+            DDRD   = 0xf3;              // Pin 0 and Pin 1 = SDA and SCL, Pin 2 and Pin3 used for the keys
+            PORTD  = 0x0f;              // pull ups
 //  PORT F:
-    DDRF  = 0x60;    // 0110 0000 F5, F6 controlls iRed  - F7 receives iRed
+            DDRF   = 0;                 // read adc
+        break;
 
+        case EL_ROBOT:
+//  PORT D:
+           DDRD   = 0xef;               // PD4  left wheel
+//  PORT F:
+           DDRF  = 0x60;      // 0110 0000 F5, F6 controlls iRed  - F7 receives iRed
 
-    PORTF = 0x40; // BACK LEFT
-    PORTF |= 0x80; // PortF7 = High   Pullup
+           PORTF = 0x40;                // BACK LEFT
+           PORTF |= 0x80;               // PortF7 = High   Pullup
+        break;
 
-
-//###
-//# ??
     }
 
 
@@ -254,7 +266,8 @@ void initDriver(char target)
 
     key.pressed       = key_pressed;
     key.released      = key_released;
-    key.quit          = key_quit;
+    key.acknowledge   = key_acknowledge;
+    key.quit          = key_acknowledge;  // will be deleted later!!!
     key.stillPressed  = key_stillPressed;
 
 
@@ -262,16 +275,18 @@ void initDriver(char target)
 //  TIMER:
 //-----------------------------------------------------------------------------
 
-    timeCounter.tenMsec  = timeCounter2.tenMsec = timeCounter3.tenMsec = 0;
+    timeCounter.tenMsec    = timeCounter2.tenMsec = timeCounter3.tenMsec = 0;
 
-    timeCounter.start    = timeCounter_start;
-    timeCounter.expired  = timeCounter_expired;
+    timeCounter.start      = timeCounter_start;
+    timeCounter.expired    = timeCounter_expired;
+    timeCounter.remaining  = timeCounter_remaining;
+    timeCounter2.start     = timeCounter2_start;
+    timeCounter2.expired   = timeCounter2_expired;
+    timeCounter2.remaining = timeCounter2_remaining;
 
-    timeCounter2.start   = timeCounter2_start;
-    timeCounter2.expired = timeCounter2_expired;
-
-    timeCounter3.start   = timeCounter3_start;
-    timeCounter3.expired = timeCounter3_expired;
+    timeCounter3.start     = timeCounter3_start;
+    timeCounter3.expired   = timeCounter3_expired;
+    timeCounter3.remaining = timeCounter3_remaining;
 
 //-----------------------------------------------------------------------------
 //  UART SERIAL:
@@ -311,12 +326,12 @@ void initDriver(char target)
     iRed.selectQuarter        =  iRed_selectQuarter;
     iRed.switchTransmitter    =  iRed_switchTransmitter;
     iRed.receivedSignal       =  iRed_receivedSignal;
-    iRed.quit                 =  iRed_quit;
+    iRed.acknowledge          =  iRed_acknowledge;
 
     iCounter = 0;
 
 //    iRed.switchTransmitter(OFF);
-//    iRed.quit();
+//    iRed.acknowledge();
 //    iRed.selectQuarter(1);
 
 //-----------------------------------------------------------------------------
@@ -332,20 +347,20 @@ void initDriver(char target)
 //  i2c-Container:
 //-----------------------------------------------------------------------------
 
-	TWBR = 12;     // TWBR=12, TWPS=0 im Reg. TWSR per default;  set f_SCL = 400 kHz
-	i2cInit();                         // needs PORT D Pin 0 = CLK and 1 = SDA
-
-//  i2c:
-
-//  i2C:  -- Container
-
+	i2cInit(target);     // needs PORT D Pin 0 = CLK and 1 = SDA
     i2c.write = i2c_Write;
+    i2c.writeDis = i2c_WriteDis;
 
 //-----------------------------------------------------------------------------
 //  DISPLAY:
 //-----------------------------------------------------------------------------
 
-    display.Linelength = ((target == DIS2_TEST) || (target == EL_ROBOT )) ? 16 : 8;
+//###
+//int d;
+//int a;
+
+
+    display.Linelength = ((target == DIS2_TEST) || (target == DIS_I2C )|| (target == EL_ROBOT )) ? 16 : 8;
     display.shownCursorPosition = 0;
 
     if (target)   // all systems with an display have numbers greater than 0
@@ -365,8 +380,11 @@ void initDriver(char target)
 
             delay(50);
 
-        if (target < EL_ROBOT)  // the roboter uses i2c port expander
-        {
+            switch (target)
+            {
+
+            case DIS_TEST:  case DIS2_TEST:
+
             _useI2Cdisplay = FALSE;
 
             _writeCommand8(0, DISPLAY_8_BIT_MODE);    delay(20);
@@ -380,9 +398,37 @@ void initDriver(char target)
             _writeCommand4(0, DISPLAY_SHIFT_OFF);     delay(20);
             _writeCommand4(0, DISPLAY_ENTRY_MODE);    delay(20);
             _writeCommand4(0, DISPLAY_ON);            delay(20);
-        }
-        else  // EL ROBOTER uses i2c with an portexpander for the display:
-        {
+
+
+            break;
+
+            case DIS_I2C :
+
+            _writeCommand8(0, 0x30);/* 8 Bit       */ delay(20);
+            _writeCommand8(0, 0x30);/* 8 Bit       */ delay(20);
+            _writeCommand8(0, 0x30);/* 8 Bit       */ delay(20);
+            _writeCommand8(0, 0x20);/* 8 Bit       */ delay(400);
+
+            _writeCommand4(0, 0x01);/*Clear Display*/ delay(20);
+            _writeCommand4(0, 0x28);/*2-lines, 5x8 */ delay(20);
+            _writeCommand4(0, 0x08);/*Display Off  */ delay(20);
+
+            _writeCommand4(0, 0x03);/*No Shift     */ delay(20);
+            _writeCommand4(0, 0x06);/*Entry Mode   */ delay(20);
+            _writeCommand4(0, 0x0e);/*Display ON   */ delay(20);
+
+            delay(1000);
+
+//    a = 0x27 << 1;
+//    d = 8;     i2c_Start(); TWDR = a; i2c_Wait(); TWDR = d;  i2c_Stop(); delay (10);
+// diese Zeilen werden nicht gebraucht und können später entfernt werden.
+
+
+
+            break;
+
+            case EL_ROBOT:
+
             _useI2Cdisplay = TRUE;
 
             _writeCommand8(0, 0x03);/* 8 Bit       */ delay(20);
@@ -397,6 +443,7 @@ void initDriver(char target)
             _writeCommand4(0, 0x06);/*Entry Mode   */ delay(20);
             _writeCommand4(0, 0x0e);/*Display ON   */ delay(20);
 
+            break;
         }
     }
     else
@@ -649,7 +696,7 @@ char key_released(char k)
     return ret;
 }
 
-void key_quit(void)
+void key_acknowledge(void)
 {
     key.flags = 0;
 }
@@ -674,13 +721,18 @@ char key_stillPressed(char k)     ////// pressed
 //  TIMER:
 //-----------------------------------------------------------------------------
 
-void timeCounter_start (int mSec) { timeCounter.tenMsec  = mSec / 10; }
+void timeCounter_start (int mSec) { timeCounter .tenMsec = mSec / 10; }
 void timeCounter2_start(int mSec) { timeCounter2.tenMsec = mSec / 10; }
 void timeCounter3_start(int mSec) { timeCounter3.tenMsec = mSec / 10; }
 
-char timeCounter_expired (void)   { return (timeCounter.tenMsec  == 0) ? TRUE : FALSE; }
+char timeCounter_expired (void)   { return (timeCounter .tenMsec == 0) ? TRUE : FALSE; }
 char timeCounter2_expired(void)   { return (timeCounter2.tenMsec == 0) ? TRUE : FALSE; }
 char timeCounter3_expired(void)   { return (timeCounter3.tenMsec == 0) ? TRUE : FALSE; }
+
+int timeCounter_remaining (void)  { return timeCounter .tenMsec * 10;}
+int timeCounter2_remaining(void)  { return timeCounter2.tenMsec * 10;}
+int timeCounter3_remaining(void)  { return timeCounter3.tenMsec * 10;}
+
 
 //-----------------------------------------------------------------------------
 //  UART SERIAL:
@@ -764,7 +816,7 @@ char iRed_receivedSignal(void)
     return iRed.flag;
 }
 
-void iRed_quit(void)
+void iRed_acknowledge(void)
 {
     iRed.flag = FALSE;
 }
@@ -799,23 +851,39 @@ unsigned char lineF_left(void)
 //  I2C:
 //-----------------------------------------------------------------------------
 
-void i2cInit(void)
+void i2cInit(char t)
 {
+	TWBR = 12;     // TWBR=12, TWPS=0 im Reg. TWSR per default;  set f_SCL = 400 kHz
 
-   i2c_Start();    TWDR = 0x40;        // Adr. 0100 000W + Write (W=0)
-   i2c_Wait();     TWDR = 0x05;        // write Registeradr. IOCON
-   i2c_Wait();     TWDR = 0x2A;        // configure IOCON: Byte Mode:
-                                       // Slew Rate enable, no Open Drain by INTn, INTn actice-high
-   i2c_Stop();
+	switch (t)
+	{
+	    case DIS_I2C:
 
+            delay(5);
+            i2c_Start();  TWDR = 0x27 << 1;       // Adr. 0x27  + Write (W = 0)
+            i2c_Wait();   TWDR = 0x00;  // Expander Reset
+            i2c_Stop();
+            delay(1000);                // Port Expnader needs this wait time
 
-//  configure GP with IODIR as OUTPUT:
+	    break;
 
-   i2c_Start();	   TWDR = 0x40;        // Adr. 0100 000W + Write (W=0)
-   i2c_Wait();     TWDR = 0x00;        // Registeradr. IODIR
-   i2c_Wait(); 	   TWDR = 0x00;        // configure IODIR: all Pins OUTPUT
+	    case EL_ROBOT:
 
-   i2c_Stop();
+	        i2c_Start();  TWDR = 0x40;  // Adr. 0100 000W + Write (W = 0)
+            i2c_Wait();   TWDR = 0x05;  // write Registeradr. IOCON
+            i2c_Wait();   TWDR = 0x2A;  // configure IOCON: Byte Mode:
+                                        // Slew Rate enable, no Open Drain by INTn, INTn actice-high
+            i2c_Stop();
+
+            //  configure GP with IODIR as OUTPUT:
+
+            i2c_Start();   TWDR = 0x40; // Adr. 0100 000W + Write (W = 0)
+            i2c_Wait();    TWDR = 0x00; // Registeradr. IODIR
+            i2c_Wait();    TWDR = 0x00; // configure IODIR: all Pins OUTPUT
+            i2c_Stop();
+
+	    break;
+	}
 }
 
 void i2c_Write(char addr, char data)
@@ -868,23 +936,39 @@ void _writeCommand8(char rs, char command)
 {
 char x = 0xC0 | command;	// prepare for P7 and P6 has to be HIGH for PCF8574
 
-    if (_useI2Cdisplay == FALSE)
+    switch (system_target)
     {
+        case DIS_TEST:  case DIS2_TEST:
 
-        command >>= 4;
-        PORTB = command | rs;
-        PORTB |= 0x20;                     // enable
-        {asm volatile ("nop"); }
-        PORTB &= ~0x20;
-        _wait_64_usec();
-        PORTB = 0x0;
-    }
-    else
-    {
-        if (rs == DATA) x = x |  (1 << RS) ;  // for characters
-        else            x = x & ~(1 << RS) ;  // for commands
-        x = x | (1<<E);
-        i2c.write(I2C_ADDR, command);
+            command >>= 4;
+            PORTB = command | rs;
+            PORTB |= 0x20;                     // enable
+            {asm volatile ("nop"); }
+            PORTB &= ~0x20;
+            _wait_64_usec();
+            PORTB = 0x0;
+        break;
+
+        case DIS_I2C:
+
+//rs = 0;
+//command = 0x30;
+
+// was tun mit rs == DATA??
+
+             i2c.writeDis(I2C_ADDR_PE_DISPLAY, command);
+
+        break;
+
+        case EL_ROBOT:
+
+            if (rs == DATA) x = x |  (1 << RS) ;  // for characters
+            else            x = x & ~(1 << RS) ;  // for commands
+
+            x = x | (1<<E);
+
+            i2c.write(I2C_ADDR_PE_ROBOT, command);
+        break;
     }
 }
 
@@ -892,8 +976,10 @@ void _writeCommand4(char rs, char command)
 {
 char temp = command, x = 0xC0;	// prepare for P7 and P6 has to be HIGH for PCF8574
 
-    if (_useI2Cdisplay == FALSE)
+    switch (system_target)
     {
+        case DIS_TEST:  case DIS2_TEST:
+
         PORTB = ((command >> 4) & 0x0f) | rs;
     //  enable:
         PORTB |= 0x20; {asm volatile ("nop"); } PORTB &= ~0x20; _wait_64_usec();
@@ -902,9 +988,33 @@ char temp = command, x = 0xC0;	// prepare for P7 and P6 has to be HIGH for PCF85
     //  enable:
         PORTB |= 0x20; {asm volatile ("nop"); } PORTB &= ~0x20; _wait_64_usec();
         PORTB = 0x0;
-    }
-    else
-    {
+        break;
+
+        case DIS_I2C:
+
+        if (rs) // DATA for characters used!
+        {
+//led.off(FLIP);
+//PORTB = command;
+//debug = TRUE;
+
+            i2c.writeDis(I2C_ADDR_PE_DISPLAY, (command & 0xf0) | 0x09); delay (5);
+
+//debug = FALSE;
+
+            i2c.writeDis(I2C_ADDR_PE_DISPLAY, (command << 4)   | 0x09); delay (5);
+        }
+        else
+        {
+            i2c.writeDis(I2C_ADDR_PE_DISPLAY, (command & 0xf0) | 0x08); delay (5);
+            i2c.writeDis(I2C_ADDR_PE_DISPLAY, (command << 4)   | 0x08); delay (5);
+        }
+
+
+        break;
+
+
+        case EL_ROBOT:
 
         if (rs == DATA) x = x |  (1 << RS);  // for characters
         else            x = x & ~(1 << RS);  // for commands
@@ -918,7 +1028,7 @@ char temp = command, x = 0xC0;	// prepare for P7 and P6 has to be HIGH for PCF85
         if (temp & 0b00100000) {x = x | (1<<DB5);} else {x = x & ~(1<<DB5);}
         if (temp & 0b00010000) {x = x | (1<<DB4);} else {x = x & ~(1<<DB4);}
 
-        i2c.write(I2C_ADDR, x);
+        i2c.write(I2C_ADDR_PE_ROBOT, x);
 
 	//  Lower Nibble:
 
@@ -927,10 +1037,30 @@ char temp = command, x = 0xC0;	// prepare for P7 and P6 has to be HIGH for PCF85
         if (temp & 0b00000010) {x = x | (1<<DB5);} else {x = x & ~(1<<DB5);}
         if (temp & 0b00000001) {x = x | (1<<DB4);} else {x = x & ~(1<<DB4);}
 
-        i2c.write(I2C_ADDR, x);
+        i2c.write(I2C_ADDR_PE_ROBOT, x);
 
+        break;
     }
 }
+
+
+
+
+
+void i2c_WriteDis(char addr, char data)
+{
+
+//if (debug == TRUE)
+//{
+//
+//}
+
+    i2c_Start(); TWDR = addr; i2c_Wait(); TWDR = data;        i2c_Stop(); delay (5);
+    i2c_Start(); TWDR = addr; i2c_Wait(); TWDR = data | 0x4;  i2c_Stop(); delay (5);
+    i2c_Start(); TWDR = addr; i2c_Wait(); TWDR = data;        i2c_Stop(); delay (5);
+}
+
+
 
 //-----------------------------------------------------------------------------
 // DISPLAY:
@@ -957,6 +1087,8 @@ void display_writeChar(char a)
 
 void display_setCursor(char x)
 {
+//char command;
+
     if (x < 0) x = 0;
 
     x = x % (display.Linelength <<1);
@@ -965,13 +1097,14 @@ void display_setCursor(char x)
 
     if (display.Linelength == 8)
     {
-        if (x >= 8) x += 0x38; // 0x40 - 8  = 0x38
+        if (x >= 8) x += 0x38;          // 0x40 - 8  = 0x38
     }
-    if (display.Linelength == 16)
+    if (display.Linelength == 0x10)     // 16
     {
-        if (x >= 16) x += 0x30; // 0x40 - 16 = 0x30
+        if (x >= 16) x += 0x30;         // 0x40 - 16 = 0x30
     }
-    _writeCommand4(0, DISPLAY_SET_CURSOR | x);
+
+    _writeCommand4(0, DISPLAY_SET_CURSOR | x );
 }
 
 void display_writeString(char * s)
@@ -994,9 +1127,9 @@ int j = 0;
                 case -100: *(s+i) = 0xf5; /*ü*/ break; // -11 ü
                 case  -74: *(s+i) = 0xef; /*ö*/ break;
                 case  -92: *(s+i) = 0xe1; /*ä*/ break; // -31 ä
+                case  -97: *(s+i) = 0xe2; /*ß*/ break;
                 case -124: *(s+i) = 0xe1; /*ä*/ break;
                 case -106: *(s+i) = 0xef; /*ö*/ break;
-                case  -97: *(s+i) = 0xe2; /*ß*/ break; // -30 ß
             }
         }
 
@@ -1015,12 +1148,12 @@ int j = 0;
             switch (*(s+i))
             {
                 case  -68: *(s+i) = 0xf5; /*ö*/ break;
+                case -100: *(s+i) = 0xf5; /*ü*/ break; // -11 ü
                 case  -74: *(s+i) = 0xef; /*ö*/ break;
                 case  -92: *(s+i) = 0xe1; /*ä*/ break;
                 case  -97: *(s+i) = 0xe2; /*ß*/ break;
                 case -124: *(s+i) = 0xe1; /*ä*/ break;
                 case -106: *(s+i) = 0xef; /*ö*/ break;
-                case -100: *(s+i) = 0xf5; /*ü*/ break;
 
             }
         }
@@ -1143,8 +1276,10 @@ void _wait_64_usec(void)
 
 void delay(int msec)
 {
-    msec <<= 4;  //
-    for(; msec > 0 ; msec--) _wait_64_usec();
+int long x;
+    x = msec << 4;
+
+    for (; x > 0 ; x--) _wait_64_usec();
 }
 
 
@@ -1277,6 +1412,7 @@ else
 
               cli();
               for (;;);
+
 #endif
 
     }
