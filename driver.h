@@ -14,7 +14,10 @@
 #define EL_TEST_BOARD                  0    // Testboardonly
 #define DIS_TEST                       1    // 1-line Display conncted on PortB
 #define DIS2_TEST                      2    // as DIS_TEST but with two lines
-#define EL_ROBOT                       3    // Roboter i2c-disply two lines
+#define DIS_I2C                        3    // Display i2c connected
+#define EL_ROBOT                       4    // Roboter i2c-disply two lines
+
+//#define LOCK_DOWN
 
 //-----------------------------------------------------------------------------
 // Defines:
@@ -244,7 +247,8 @@ struct struct_keys
 // public:
     char (*pressed)(char key);
     char (*released)(char key);
-    void (*quit)(void);
+    void (*acknowledge)(void);
+    void (*quit)(void);  // will be deleted later!
     char (*stillPressed)(char key); // new
 // private:
     char last_keys;
@@ -258,32 +262,39 @@ KEYS_TYPE key;
 // if (key.pressed(KEY0) == TRUE)
 //-----------------------------------------------------------------------------
 // What 4: this function can be used to get key-information
-// PRE: keys can only be used for target = EL_TEST_BOARD
+// PRE: keys can only be used for target = EL_TEST_BOARD, DIS_TEST and
+//      DIS2_TEST
+//      KEY2 and KEY3 can be used for DIS_I2C
 // IN: KEY0 = a defined value for a key. see define - list
 // POST: nothing
 // RETURN: TRUE if KEY0 is pressed
-// NOTE: after any key-event use key.quit(); to be prepared for the next event
+// NOTE: after any key-event use key.acknowledge(); to be prepared for the next event
 //-----------------------------------------------------------------------------
 
 //-----------------------------------------------------------------------------
 // if (key.released(KEY0))
 //-----------------------------------------------------------------------------
 // What 4: this function can be used to get key-information
-// PRE: keys can only be used for target = EL_TEST_BOARD
+// PRE: keys can only be used for target = EL_TEST_BOARD, DIS_TEST and
+//      DIS2_TEST
+//      KEY2 and KEY3 can be used for DIS_I2C
 // IN: KEY0 = a defined value for a key. see define - list
 // POST: nothing
 // RETURN:  FALSE if KEY0 is released
-// NOTE: after any key-event use key.quit(); to be prepared for the next event
+// NOTE: after any key-event use key.acknowledge(); to be prepared for the next event
 //-----------------------------------------------------------------------------
 
 //-----------------------------------------------------------------------------
-// key.quit();
+// key.acknowledge();     // former key.quit();
 //-----------------------------------------------------------------------------
-// What 4: use this function to quit a key-event
-// PRE: keys can only be used for target = EL_TEST_BOARD
+// What 4: use this function to acknowledge a key-event
+// PRE: keys can only be used for target = EL_TEST_BOARD, DIS_TEST and
+//      DIS2_TEST
+//      KEY2 and KEY3 can be used for DIS_I2C
 // IN: nothing
 // POST: internal flags will be reseted.
 // RETURN: nothing
+// NOTE: the former name key.quit will be deleted later
 //-----------------------------------------------------------------------------
 
 //-----------------------------------------------------------------------------
@@ -378,7 +389,7 @@ struct struct_iRed
     void (*selectQuarter)(char);
     void (*switchTransmitter)(char);
     char (*receivedSignal)(void);
-    void (*quit)(void);
+    void (*acknowledge)(void);
 // private:
     char flag;
     char transmit;
@@ -438,9 +449,9 @@ IRED_TYPE iRed;
 
 
 //-----------------------------------------------------------------------------
-// iRed.quit();
+// iRed.acknowledge();
 //-----------------------------------------------------------------------------
-// What 4: quit the iRed flag
+// What 4: acknowledge the iRed flag
 // IN: nothing
 // POST: the iRed flag is set to FALSE - as long as there is a new signal detected
 // RETURN: nothing
@@ -499,6 +510,7 @@ struct struct_timeCounter
     volatile int tenMsec;
     char (*expired)(void);
     void (*start)(int mSec);
+    int  (*remaining)(void);
 };
 TIME_COUNTER_TYPE timeCounter;
 TIME_COUNTER_TYPE timeCounter2;
@@ -522,6 +534,15 @@ TIME_COUNTER_TYPE timeCounter3;
 // RETURN: TRUE if the timer is expired, FALSE else
 //-----------------------------------------------------------------------------
 
+//-----------------------------------------------------------------------------
+// t = timeCounter.remaining();
+//-----------------------------------------------------------------------------
+// What 4: this function observe the remaining time from this timeCounter
+// IN: nothing
+// POST: nothing
+// RETURN: the remaining time in millisekonds
+//-----------------------------------------------------------------------------
+
 
 
 
@@ -531,6 +552,7 @@ typedef struct struct_i2c I2C_TYPE;
 struct struct_i2c
 {
     void (*write)(char addr, char data);
+    void (*writeDis)(char addr, char data);
 
 };
 I2C_TYPE i2c;
