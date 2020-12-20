@@ -51,7 +51,7 @@
 #define KEY2                           0x04
 #define KEY3                           0x08
 
-#define BOUD_RATE_9600                 103
+#define BOUD_RATE_9600                 102
 
 //-----------------------------------------------------------------------------
 // ADC:
@@ -207,7 +207,7 @@ ADC_TYPE adc;
 // IN:      ADC0, ADC1 or ADC4 - from which pin should the level be measured
 // POST:    nothing
 // RETURN:  x  from type unsigned char - 0 up to 255
-// NOTE: the hardware profides only one analog digital converter
+// NOTE: the hardware provides only one analog digital converter
 // a multiplexer selectes the port pin connection from the adc to the
 // used port pin. This is handeld by the timer interrupt.
 // means all 10 msec a next portpin will be connected to be measured
@@ -251,9 +251,9 @@ struct struct_keys
     void (*quit)(void);  // will be deleted later!
     char (*stillPressed)(char key); // new
 // private:
-    char last_keys;
-    char next_keys;
-    char flags;
+    volatile char last_keys;
+    volatile char next_keys;
+    volatile char flags;
 
 };
 KEYS_TYPE key;
@@ -325,7 +325,7 @@ SERIAL_TYPE serial;
 // serial.send('A');
 //-----------------------------------------------------------------------------
 // What 4: this function sends a character via the UART
-// PRE: hardware connected, PC programm receives
+// PRE: hardware connected, PC programm receives - for EL_ROBOT only!
 // IN: 'A' any character
 // POST: the string is sent character by character - 9600 boud
 // RETURN: nothing
@@ -337,6 +337,7 @@ SERIAL_TYPE serial;
 // What 4: this fundction stores the address of the call-back-function
 // PRE: hardware connected, PC programm receives
 //      an own callback function from type: void f(char); must exist.
+//      - for EL_ROBOT only!
 // IN: the address of the own callbackfunction
 // POST: the adress is stored.
 // RETURN: nothing
@@ -350,13 +351,13 @@ struct struct_motor
     void (*setDiff)(char);
     void (*stop)(void);
 //private:
-    unsigned char left;
-    unsigned char right;
+    volatile unsigned char left;
+    volatile unsigned char right;
 //    unsigned char leftC;
 //    unsigned char rightC;
 
-    char speed;
-    char diff;
+    volatile char speed;
+    volatile char diff;
 };
 MOTOR_TYPE motor;
 
@@ -391,8 +392,8 @@ struct struct_iRed
     char (*receivedSignal)(void);
     void (*acknowledge)(void);
 // private:
-    char flag;
-    char transmit;
+    volatile char flag;
+    volatile char transmit;
 };
 IRED_TYPE iRed;
 
@@ -507,10 +508,10 @@ LINE_FOLLOWER_TYPE lineF;
 typedef struct struct_timeCounter TIME_COUNTER_TYPE;
 struct struct_timeCounter
 {
-    volatile int tenMsec;
     char (*expired)(void);
     void (*start)(int mSec);
     int  (*remaining)(void);
+    volatile int tenMsec;
 };
 TIME_COUNTER_TYPE timeCounter;
 TIME_COUNTER_TYPE timeCounter2;
@@ -543,11 +544,6 @@ TIME_COUNTER_TYPE timeCounter3;
 // RETURN: the remaining time in millisekonds
 //-----------------------------------------------------------------------------
 
-
-
-
-
-
 typedef struct struct_i2c I2C_TYPE;
 struct struct_i2c
 {
@@ -575,8 +571,9 @@ struct display_struct
     void (*storeSymbol)(char s[], char space);
     void (*clear)(void);
 //  private:
-    int shownCursorPosition;
-    int Linelength;
+    volatile int tenMsec;
+    volatile int shownCursorPosition;
+    volatile int Linelength;
 };
 DISPLAY display;
 
@@ -689,6 +686,7 @@ void delay(int msec); // use this function only if you have good reasons for!
 # warning "            /   | / ____/ / / /_  __/ / / / | / / ____/               "​
 # warning "           / /| |/ /   / /_/ / / / / / / /  |/ / / __                 "​
 # warning "          / ___ / /___/ __  / / / / /_/ / /|  / /_/ /                 "​
-# warning "_______  /_/  |_\____/_/ /_/ /_/  \____/_/ |_/\____/ ___________._____"
+# warning "         /_/  |_\____/_/ /_/ /_/  \____/_/ |_/\____/                  "
+# warning "                                                                      "​
 # warning "======================================================================"​
-#endif    // created by 3A and 3BHELS - thanx!
+#endif    // created by 3A and 3BHELS (2019/2020)- thanx!
