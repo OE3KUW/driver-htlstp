@@ -18,15 +18,16 @@
 //  intern Defines:
 //-----------------------------------------------------------------------------
 
-#define KEY3_PRESSED            0x80
-#define KEY2_PRESSED            0x40
-#define KEY1_PRESSED            0x20
-#define KEY0_PRESSED            0x10
-
-#define KEY3_RELEASED           0x08
-#define KEY2_RELEASED           0x04
-#define KEY1_RELEASED           0x02
 #define KEY0_RELEASED           0x01
+#define KEY1_RELEASED           0x02
+#define KEY2_RELEASED           0x04
+#define KEY3_RELEASED           0x08
+
+#define KEY0_PRESSED            0x10
+#define KEY1_PRESSED            0x20
+#define KEY2_PRESSED            0x40
+#define KEY3_PRESSED            0x80
+
 
 
 #define DISPLAY_8_BIT_MODE      0x30
@@ -151,7 +152,11 @@ void _doNothing_Int(int);
 void _doNothing_Float(float);
 void _doNothing_String(char *);
 void _doNothing_Array_Char(char s[], char space);
+void _doNothing_FunctionPointer (void (*fp)(char));
 void _internalCallBackDoNothing(char c);
+
+
+
 //-----------------------------------------------------------------------------
 void _writeCommand8(char rs, char command);
 void _writeCommand4(char rs, char command);
@@ -190,7 +195,9 @@ void initDriver(char target)
 
     switch (target)
     {
-        case EL_TEST_BOARD:  case DIS_TEST: case DIS2_TEST:
+        case EL_TEST_BOARD:
+        case DIS_TEST:
+        case DIS2_TEST:
 //  PORT D:
             DDRD   = 0xf0;              // used for the keys
             PORTD  = 0x0f;              // pull ups
@@ -217,7 +224,6 @@ void initDriver(char target)
         break;
 
     }
-
 
 //-----------------------------------------------------------------------------
 //  LEDS:
@@ -292,15 +298,21 @@ void initDriver(char target)
 //  UART SERIAL:
 //-----------------------------------------------------------------------------
 
-    UCSR1B = (1 << RXCIE1) | (1 << RXEN1)  | (1 << TXEN1);
-    UCSR1C = (1 << UCSZ11) | (1 << UCSZ10); // Use 8-bit character sizes
+    if (target == EL_ROBOT)
+    {
+        UCSR1B = (1 << RXCIE1) | (1 << RXEN1)  | (1 << TXEN1);
+        UCSR1C = (1 << UCSZ11) | (1 << UCSZ10); // Use 8-bit character sizes
+        UBRR1H = 0;
+        UBRR1L = BOUD_RATE_9600;
+        serial.send = serial_send;
+        serial.storeMyCallBackFunction = serial_storeMyCallBackFunction;
+    }
+    else
+    {
+        serial.send = _doNothing_Char;
+        serial.storeMyCallBackFunction = _doNothing_FunctionPointer;
+    }
 
-    UBRR1H = 0;
-    UBRR1L = BOUD_RATE_9600;
-
-
-    serial.send = serial_send;
-    serial.storeMyCallBackFunction = serial_storeMyCallBackFunction;
 
     serial.cb = _internalCallBackDoNothing;
     serial.received = 0;
@@ -593,24 +605,6 @@ void beeper_click(void)
 //  ADC:
 //-----------------------------------------------------------------------------
 
-// not in use furthermore  --- will be deleted next time
-/** void adc_use (unsigned char x)
-{
-     if ((x & 04) == 0x4) ADMUX |= (1 << MUX2); else ADMUX &= ~(1 << MUX2);
-     if ((x & 02) == 0x2) ADMUX |= (1 << MUX1); else ADMUX &= ~(1 << MUX1);
-     if ((x & 01) == 0x1) ADMUX |= (1 << MUX0); else ADMUX &= ~(1 << MUX0);
-
-     ADMUX =  REFS1 | REFS0 | ADLAR | MUX4 | MUX3 | MUX2 | MUX1 | MUX0
-     ADC0 : 000
-     ADC1 : 001
-     ADC4 : 100
-     ADC5 : 101
-     ADC6 : 110
-     ADC7 : 111  = MUX2 + MUX1 + MUX0
-
-}
-**/
-
 unsigned char adc_get(unsigned char x)
 {
     return adc.MeasuredValues[x];
@@ -687,7 +681,6 @@ char key_released(char k)
 {
     char ret = 0;
 
-
     if (k == KEY0) ret = (key.flags & KEY0_RELEASED) ? TRUE : FALSE;
     if (k == KEY1) ret = (key.flags & KEY1_RELEASED) ? TRUE : FALSE;
     if (k == KEY2) ret = (key.flags & KEY2_RELEASED) ? TRUE : FALSE;
@@ -701,7 +694,7 @@ void key_acknowledge(void)
     key.flags = 0;
 }
 
-char key_stillPressed(char k)     ////// pressed
+char key_stillPressed(char k)
 {
     char key;
     char ret;
@@ -888,7 +881,8 @@ void i2cInit(char t)
 
 void i2c_Write(char addr, char data)
 {
-	delay(2);                                    i2c_Start();
+     _wait_64_usec();_wait_64_usec();_wait_64_usec();
+	/*delay(2);*/                                    i2c_Start();
 	TWDR = addr & 0xfe;/* Adr & Write (= 0)  */  i2c_Wait();
 	TWDR = 0x0A;                                 i2c_Wait();
 	TWDR = data | (1 << E); /* Enable = HIGH */  i2c_Wait();
@@ -921,12 +915,13 @@ unsigned int t = 0;
 }
 
 // display functions:
-void _doNothing_Void(void)              {}
-void _doNothing_Char(char a)            {}
-void _doNothing_Int(int i)              {}
-void _doNothing_Float(float x)          {}
-void _doNothing_String(char * s)        {}
+void _doNothing_Void(void)                       {}
+void _doNothing_Char(char a)                     {}
+void _doNothing_Int(int i)                       {}
+void _doNothing_Float(float x)                   {}
+void _doNothing_String(char * s)                 {}
 void _doNothing_Array_Char(char s[], char space) {}
+void _doNothing_FunctionPointer(void (*fp)(char)){}
 // serial callback default function
 void _internalCallBackDoNothing(char c) {}
 
@@ -950,11 +945,6 @@ char x = 0xC0 | command;	// prepare for P7 and P6 has to be HIGH for PCF8574
         break;
 
         case DIS_I2C:
-
-//rs = 0;
-//command = 0x30;
-
-// was tun mit rs == DATA??
 
              i2c.writeDis(I2C_ADDR_PE_DISPLAY, command);
 
@@ -994,20 +984,13 @@ char temp = command, x = 0xC0;	// prepare for P7 and P6 has to be HIGH for PCF85
 
         if (rs) // DATA for characters used!
         {
-//led.off(FLIP);
-//PORTB = command;
-//debug = TRUE;
-
-            i2c.writeDis(I2C_ADDR_PE_DISPLAY, (command & 0xf0) | 0x09); delay (5);
-
-//debug = FALSE;
-
-            i2c.writeDis(I2C_ADDR_PE_DISPLAY, (command << 4)   | 0x09); delay (5);
+            i2c.writeDis(I2C_ADDR_PE_DISPLAY, (command & 0xf0) | 0x09); _wait_64_usec();//delay (1);
+            i2c.writeDis(I2C_ADDR_PE_DISPLAY, (command << 4)   | 0x09); _wait_64_usec();//delay (1);
         }
         else
         {
-            i2c.writeDis(I2C_ADDR_PE_DISPLAY, (command & 0xf0) | 0x08); delay (5);
-            i2c.writeDis(I2C_ADDR_PE_DISPLAY, (command << 4)   | 0x08); delay (5);
+            i2c.writeDis(I2C_ADDR_PE_DISPLAY, (command & 0xf0) | 0x08); _wait_64_usec();//delay (1);
+            i2c.writeDis(I2C_ADDR_PE_DISPLAY, (command << 4)   | 0x08); _wait_64_usec();//delay (1);
         }
 
 
@@ -1076,6 +1059,12 @@ void display_writeChar(char a)
         case -33:           a = -30; break; // ß
     }
 */
+
+    serial.send(a);
+    serial.send(10);
+    serial.send(13);
+
+
 
     _writeCommand4(DATA, a);
     display.shownCursorPosition++;
@@ -1163,7 +1152,7 @@ int j = 0;
     }
 }
 
-void display_writeString2ndLine(char *s)
+void display_writeString2ndLine(char *s)  // diese Funktion wird später entfernt
 {
 int i = 0;
 
@@ -1178,37 +1167,21 @@ int i = 0;
     }
 }
 
-void display_writeInt(int i)    // writes 4 digits: "+999"
+void display_writeInt(int i)    // writes 3 digits and the sign: "-999"
 {
-char neg = FALSE;
+    if (i > 999)  i =  999;  // limitation
+    if (i < -999) i = -999;  // limitation
 
-        if (i > 999)  i =  999;  // limitation
-        if (i < -999) i = -999;  // limitation
+    if (i <  0) { display_writeChar('-'); i = -i; }      else {display_writeChar(' ');}
+    if (i > 99) { display_writeChar((i/100)%10 + '0'); } else {display_writeChar(' ');}
+    if (i >  9) { display_writeChar((i/10) %10 + '0'); } else {display_writeChar(' ');}
 
-        if (i < 0)
-        {
-            neg = TRUE; i = -i;
-        }
-
-        ((neg == TRUE) && (i >=100)) ? display_writeChar('-') : display_writeChar(' ');
-
-        if (i < 100)
-            ((neg == TRUE) && (i >= 10)) ? display_writeChar('-') : display_writeChar(' ');
-        else
-        {
-            display_writeChar((i/100)%10 + '0');
-        }
+    serial.send(i + '0');
+    serial.send(10);
+    serial.send(13);
 
 
-        if (i < 10)
-            (neg == TRUE) ? display_writeChar('-') : display_writeChar(' ');
-        else
-        {
-            display_writeChar((i/10)%10 + '0');
-        }
-
-        display_writeChar((i)%10 + '0');
-
+    display_writeChar((i)%10 + '0');
 }
 
 void display_writeFloat(float x)
@@ -1414,24 +1387,8 @@ else
               for (;;);
 
 #endif
-
     }
 }
-
-// hier wird weiter entwickelt...
-
-/*    if ((PIND & 0x10) == 0x10)
-    {
-        PORTB |= 0x01;
-    }
-    else
-    {
-        PORTB &= 0xfe;
-    }
-    */
-
-
-    //PORTD ^= 0xff;
 
 }
 
