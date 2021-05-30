@@ -1,105 +1,134 @@
 /***************************************************************************************
- * Beispiel für das einstellen einer Zahl am Display und Verwendung von DIS_I2C
- * kurzer Tasten-Click: die Zahl (ausgegeben am Display) wird um eins erhöht.
- * langer Tasten-Druck: nach 1 Sekunde (=1000 msec) wird die Zahl  um 1 erhöht.
- * dann nach weiteren alle 500 msec wieder und dann alle 100 msec wieder
- * die neue Zahl soll dabei stets ins eeprom gespeichert werden.
- * wird das System abgeschalten und wieder eingeschalten, soll die zuletzt eingestellte
- * Zahl wieder am Display erscheinen und als neue Ausgangszahl (n) verwendet werden.
- *
- * Entwickelt für die3AHELS und 3BHELS Dezember 2020 - frohe Weihnachten! AV Kuran
- **************************************************************************************/
+//                       d r i v e r   m a i n . c
+//
+//                                                                      қuran jun 2021
+**************************************************************************************/
 
 #include <avr/io.h>
 #include "driver.h"
 
-
 #define STATE_WAIT                     0
-#define STATE_SLOW_INCREMENTSTATE      1
-#define STATE_FAST_INCREMENTSTATE      2
+#define STATE_WORK                     1
 
-#define N_POSITION                     10
+
+void Receive(char c);
+int i;
 
 int main(void)
 {
-unsigned int n;
 int state;
+unsigned char x;
 
-    initDriver(DIS_I2C);    // Muss der erste Befehl sein!
-    display.hideCursor();   // schaltet das Cursorblinken ab
+    initDriver(EL_ROBOT);
+    serial.storeMyCallBackFunction(Receive);
+
+    serial.send('s');
+    serial.send('t');
+    serial.send('a');
+    serial.send('r');
+    serial.send('t');
+    serial.send('!');
+    serial.send(10);
+    serial.send(13);
+
+    display.writeString("hi!");
+    display.hideCursor();
+
+
+    led.off(FLIP);
+    led.on(LEFT_FRONT);
+    led.on(LEFT_REAR);
+    led.on(RIGHT_FRONT);
+    led.on(RIGHT_REAR);
 
     state = STATE_WAIT;
 
-    n = eeprom.getInt(0);   // die Zahl n wird hier stets am Adressplatz 0 des
-                            // EEPROMS abgespeichert - hier wieder abgeholt.
-    /* ------------------01234567890123456----------------------------------*/
+    timeCounter.start(3000);
+    i = 0;
 
-    display.writeString("press T2:      ");
-    display.setCursor(N_POSITION);
-    display.writeInt(n);
+    motor.setSpeed(0);
 
     for(;;)
     {
         switch (state)
         {
-            case STATE_WAIT:    // hier wird darauf gewartet, dass ein Tater gedrückt wird.
-
-                if (key.pressed(KEY2))
-                {
-                    key.acknowledge(); // internes Flag wird zurück gesetzt
-                    timeCounter.start(1000);
-                    // um später entscheiden zu können,
-                    // ob der Taster schon länger als 1 Sekunde gedrückt wurde.
-                    // Deshalb muss sofort! mit der Zeitmessung begonnen werden.
-                    n++;   eeprom.storeInt(n, 0);
-                    display.setCursor(N_POSITION);
-                    display.writeInt(n);
-
-                    state = STATE_SLOW_INCREMENTSTATE;
-                }
-
-            break;
-
-            case STATE_SLOW_INCREMENTSTATE:
-
-                if (key.released(KEY2))  // wird der Tater sofort losgelassen
-                {                        // zurück zu WAIT
-                    key.acknowledge();
-                    state = STATE_WAIT;
-                }
-
-                if ((timeCounter.expired() && key.stillPressed(KEY2)))
-                {
-                    timeCounter.start(500);
-                    n++;   eeprom.storeInt(n, 0);
-                    display.setCursor(N_POSITION);
-                    display.writeInt(n);
-                    state = STATE_FAST_INCREMENTSTATE;
-                }
-            break;
-
-            case STATE_FAST_INCREMENTSTATE:
-
-                if (key.released(KEY2))  // wird der Tater sofort losgelassen
-                {                        // zurück zu WAIT
-                    key.acknowledge();
-                    state = STATE_WAIT;
-                }
+            case STATE_WAIT:
 
                 if (timeCounter.expired())
                 {
-                    timeCounter.start(100);
-                    n++;   eeprom.storeInt(n, 0);
-                    display.setCursor(N_POSITION);
-                    display.writeInt(n);
+                    state = STATE_WORK;
+                    led.on(DUAL_GREEN);
+                    led.on(RIGHT_FRONT);
+
+
+                    serial.send('g');
+                    serial.send('o');
+                    serial.send(' ');
+                    serial.send('0' + i);
+                    serial.send('!');
+                    serial.send(10);
+                    serial.send(13);
+
+                    timeCounter.start(500);
+                    i++;
+
+                    led.off(FLIP);
+                    led.on(LEFT_FRONT);
+                    led.on(LEFT_REAR);
+                    led.on(RIGHT_FRONT);
+                    led.on(RIGHT_REAR);
+                    led.on(DUAL_YELLOW);
+                    x = adc.get(ADC0);
+                    display.setCursor(7);
+                    display.writeFloat(x / ADC_VOLTAGE);
+
+//                  motor.setSpeed(-3);
+
                 }
 
             break;
+
+            case STATE_WORK:
+
+                if (timeCounter.expired())
+                {
+//                    motor.setSpeed(5);
+                    led.on(DUAL_RED);
+                    led.off(RIGHT_FRONT);
+
+                    led.on(FLIP);
+                    led.off(LEFT_FRONT);
+                    led.off(LEFT_REAR);
+                    led.off(RIGHT_FRONT);
+                    led.off(RIGHT_REAR);
+                    led.off(DUAL_YELLOW);
+                    timeCounter.start(1000);
+                    state = STATE_WAIT;
+                }
+            break;
+
 
         }
     }
 
     return 0;
 
+}
+
+void Receive(char c)
+{
+    i = 0;
+
+    if (c == 'o')
+    {
+                    serial.send(10);
+                    serial.send(13);
+                    serial.send('o');
+                    serial.send('k');
+                    serial.send('!');
+                    serial.send(10);
+                    serial.send(13);
+
+    }
 }
 
