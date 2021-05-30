@@ -1,11 +1,8 @@
-//*****************************************************************************
+/***************************************************************************************
+//                              d r i v e r . c
 //
-//
-//                               d r i v e r . c
-//
-//
-// Elektronik und Technische Informatik      dezember 2020 Wolfgang Uriel KURAN
-//*****************************************************************************
+//                                                                      қuran jun 2021
+**************************************************************************************/
 // C o n f i g u r a t i o n   L i n e s :                   © htl st.pölten EL
 
 
@@ -372,7 +369,7 @@ void initDriver(char target)
 //int a;
 
 
-    display.Linelength = ((target == DIS2_TEST) || (target == DIS_I2C )|| (target == EL_ROBOT )) ? 16 : 8;
+    display.Linelength = ((target == DIS2_TEST) || (target == DIS_I2C ) /*|| (target == EL_ROBOT )*/) ? 16 : 8;
     display.shownCursorPosition = 0;
 
     if (target)   // all systems with an display have numbers greater than 0
@@ -1060,9 +1057,9 @@ void display_writeChar(char a)
     }
 */
 
-    serial.send(a);
-    serial.send(10);
-    serial.send(13);
+//     serial.send(a);
+//     serial.send(10);
+//     serial.send(13);
 
 
 
