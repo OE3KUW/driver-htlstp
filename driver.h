@@ -1,11 +1,8 @@
-//*****************************************************************************
+/***************************************************************************************
+//                                    d r i v e r . h
 //
-//                               d r i v e r . h
-//
-//
-// Elektronik und Technische Informatik      dezember 2020 Wolfgang Uriel KURAN
-//*****************************************************************************
-// C o n f i g u r a t i o n   L i n e s :                   © htl st.pölten EL
+//                                                                      қuran jun 2021
+**************************************************************************************/
 
 //-----------------------------------------------------------------------------
 // target:
@@ -32,7 +29,7 @@
 // LEDs und BEEPER and KEYs:
 //-----------------------------------------------------------------------------
 
-#define FLIP                           0x80    // on board led
+#define FLIP                           0x80  // on board led
 
 #define RIGHT_FRONT                    0x01  // used for blinker
 #define RIGHT_REAR                     0x02
@@ -42,7 +39,7 @@
 #define DUAL_GREEN                     0x10	// PB4
 #define DUAL_RED                       0x20 // PB5
 #define DUAL_YELLOW                    0x30 // PB4 + PB5
-#define DUAL_LED                       0x30 // zuseful to switch the led off
+#define DUAL_LED                       0x30 // useful to switch the led off
 
 #define BEEPER_CLICK                   0x80  // used for the beepeer
 
@@ -51,7 +48,7 @@
 #define KEY2                           0x04
 #define KEY3                           0x08
 
-#define BOUD_RATE_9600                 102
+#define BOUD_RATE_9600                 103
 
 //-----------------------------------------------------------------------------
 // ADC:
@@ -122,6 +119,8 @@ LED_TYPE led;
 // led.on(x);
 //-----------------------------------------------------------------------------
 // What 4: this function turns leds on
+// PRE: the FLIP Led can not be used for ROBOT - this PortPin is used for
+//      the left motor!
 // IN: x can be RIGHT:FRONT for e.g. there is a list of defines preparated
 // POST: the selected led is turned on
 // RETURN: nothing
